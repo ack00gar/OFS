@@ -107,6 +107,7 @@ private:
 
     void saveProject() noexcept;
     void quickExport() noexcept;
+    void quickExport2() noexcept;
     void pickDifferentMedia() noexcept;
 
     void saveHeatmap(const char* path, int width, int height, bool withChapters);
