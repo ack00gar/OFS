@@ -253,10 +253,16 @@ sudo dnf install mpv-libs-devel
 sudo pacman -S mpv
 ```
 
-### Windows: Missing mpv-2.dll
+### Windows: mpv-2.dll
 
-The Windows build includes mpv-2.dll in the bin folder. If missing, download from:
-[https://mpv.io/installation/](https://mpv.io/installation/)
+The Windows build automatically downloads mpv-2.dll during compilation (August 2024 version).
+
+**To use a newer version:**
+1. Download the latest `mpv-dev-x86_64-v3-*.7z` from [SourceForge](https://sourceforge.net/projects/mpv-player-windows/files/libmpv/)
+2. Extract `mpv-2.dll` from the archive
+3. Replace the existing `mpv-2.dll` in your `build/` and `bin/` directories
+
+**Note:** The build system downloads from SourceForge automatically. If you encounter download issues, manually download and extract to your build directory before compiling.
 
 ## Project Structure
 

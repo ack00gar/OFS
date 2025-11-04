@@ -80,14 +80,16 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 
 if(WIN32)
   # download mpv binaries
+  # Using mpv-dev from August 2024 - for latest version see:
+  # https://sourceforge.net/projects/mpv-player-windows/files/libmpv/
   if (NOT EXISTS "${CMAKE_BINARY_DIR}/mpv-2.dll")
     file(DOWNLOAD "https://www.7-zip.org/a/7zr.exe" "7zr.exe" SHOW_PROGRESS)
-    file(DOWNLOAD "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-v3-20220925-git-56e24d5.7z/download" "mpv-dev.7z" SHOW_PROGRESS)
+    file(DOWNLOAD "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-v3-20250824-git-5faec4e.7z/download" "mpv-dev.7z" SHOW_PROGRESS)
     add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
-        COMMAND "${CMAKE_BINARY_DIR}/7zr.exe" "x" "-y" "mpv-dev.7z" "mpv-2.dll" 
+        COMMAND "${CMAKE_BINARY_DIR}/7zr.exe" "x" "-y" "mpv-dev.7z" "mpv-2.dll"
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         BYPRODUCTS "${CMAKE_BINARY_DIR}/mpv-2.dll"
-        DEPENDS "${CMAKE_BINARY_DIR}/mpv-dev.7z")    
+        DEPENDS "${CMAKE_BINARY_DIR}/mpv-dev.7z")
   endif()
 
 	# copy mpv-2.dll to bin dir
