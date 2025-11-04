@@ -2,6 +2,22 @@
 
 **FunGen Edition** is a customized build of OpenFunscripter optimized for macOS Apple Silicon with enhanced features and branding.
 
+---
+
+## 💚 Support Development
+
+**Your donations help support the development of [FunGen](https://github.com/ack00gar/FunGen-AI-Powered-Funscript-Generator) and contribute to potential future enhancements of OFS FunGen Edition.**
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/k00gar)
+
+### About FunGen
+
+**FunGen is a Python-based tool that uses AI to generate Funscript files from VR and 2D POV videos.** It enables fully automated funscript creation for individual scenes or entire folders of videos.
+
+**Join the Discord community for discussions and support:** [Discord Community](https://discord.gg/WYkjMbtCZA)
+
+---
+
 ## Features
 
 - ✅ **Native Apple Silicon (ARM64) support** - Runs natively on M1/M2/M3 Macs
@@ -167,13 +183,21 @@ endif()
 
 ## Dependencies
 
+### macOS
+
+**mpv is required for video playback.** Install via Homebrew:
+```bash
+brew install mpv
+```
+
+### Building from Source
+
 All dependencies are included as git submodules except:
 
-- **mpv/ffmpeg** - Install via package manager (Homebrew on macOS, apt/dnf/pacman on Linux)
+- **mpv/ffmpeg** - Required for video playback (Homebrew on macOS, apt/dnf/pacman on Linux)
 - **OpenGL** - System provided
 
-### Included Submodules
-
+**Included Submodules:**
 - SDL2 (windowing, input, events)
 - ImGui (UI framework)
 - Lua 5.4 (scripting)
@@ -184,20 +208,33 @@ All dependencies are included as git submodules except:
 - bitsery (serialization)
 - tracy (profiling, optional)
 
-## Troubleshooting
+## macOS Installation & Code Signing
 
-### macOS: "OpenFunscripter.app is damaged"
+### ⚠️ Important: App is Not Code Signed
 
-This happens because the app is not signed. Right-click the app, select "Open", then click "Open" in the dialog.
+This app is **not code signed** with an Apple Developer certificate. macOS will show a security warning on first launch.
 
-Or remove the quarantine flag:
+### How to Open the App
+
+**Method 1: Right-Click Open (Recommended)**
+1. Download and extract `OpenFunscripter.app`
+2. **Right-click** (or Control-click) the app
+3. Select **"Open"** from the menu
+4. Click **"Open"** in the security dialog
+5. The app will now run normally
+
+**Method 2: Remove Quarantine Flag (Terminal)**
 ```bash
 xattr -cr /Applications/OpenFunscripter.app
 ```
 
+**Note:** You only need to do this **once**. After the first launch, the app will open normally.
+
+## Troubleshooting
+
 ### macOS: Missing video playback
 
-Install mpv via Homebrew:
+If video playback doesn't work, install mpv via Homebrew:
 ```bash
 brew install mpv
 ```
