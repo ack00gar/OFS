@@ -43,8 +43,18 @@ struct LuaFunscriptAction
     }
 
     inline void set_pos(lua_Integer pos) noexcept
-    {            
+    {
         o.pos = Util::Clamp<lua_Integer>(pos, 0, 100);
+    }
+
+    inline bool get_selected() const noexcept
+    {
+        return selected;
+    }
+
+    inline void set_selected(bool value) noexcept
+    {
+        selected = value;
     }
 };
 

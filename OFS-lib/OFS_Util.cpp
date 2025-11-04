@@ -69,8 +69,9 @@ int Util::OpenFileExplorer(const std::string& str)
     auto params = ss.str();
     return WindowsShellExecute(nullptr, L"explorer", params.c_str());
 #elif defined(__APPLE__)
-    LOG_ERROR("Not implemented for this platform.");
-    return 1;
+    char tmp[2048];
+    stbsp_snprintf(tmp, sizeof(tmp), "open \"%s\"", str.c_str());
+    return std::system(tmp);
 #else
     return OpenUrl(str);
 #endif
@@ -85,8 +86,9 @@ int Util::OpenUrl(const std::string& url)
     auto params = ss.str();
     return WindowsShellExecute(L"open", params.c_str(), NULL);
 #elif defined(__APPLE__)
-    LOG_ERROR("Not implemented for this platform.");
-    return 1;
+    char tmp[2048];
+    stbsp_snprintf(tmp, sizeof(tmp), "open \"%s\"", url.c_str());
+    return std::system(tmp);
 #else
     char tmp[1024];
     stbsp_snprintf(tmp, sizeof(tmp), "xdg-open \"%s\"", url.c_str());

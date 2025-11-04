@@ -1843,15 +1843,15 @@ void OpenFunscripter::UpdateNewActiveScript(uint32_t activeIndex) noexcept
 
 void OpenFunscripter::updateTitle() noexcept
 {
-    const char* title = "OFS";
+    const char* title = "OFS - FunGen Edition";
     if (LoadedProject->IsValid()) {
-        title = Util::Format("OpenFunscripter %s@%s - \"%s\"",
+        title = Util::Format("OpenFunscripter %s@%s [FunGen Edition] - \"%s\"",
             OFS_LATEST_GIT_TAG,
             OFS_LATEST_GIT_HASH,
             LoadedProject->Path().c_str());
     }
     else {
-        title = Util::Format("OpenFunscripter %s@%s",
+        title = Util::Format("OpenFunscripter %s@%s [FunGen Edition]",
             OFS_LATEST_GIT_TAG,
             OFS_LATEST_GIT_HASH);
     }
@@ -2693,10 +2693,87 @@ void OpenFunscripter::ShowAboutWindow(bool* open) noexcept
 {
     if (!*open) return;
     OFS_PROFILE(__FUNCTION__);
+
+    // Load FunGen logo texture if not already loaded
+    if (fungenLogoTexture == 0) {
+        // Try multiple paths for the logo
+        std::vector<std::string> logoPaths = {
+            Util::Prefpath("fungen_logo.png"),
+            Util::Resource("data/fungen_logo.png"),
+            "/Users/k00gar/PycharmProjects/FunGen/streamer/static/logo.png"
+        };
+
+        int channels;
+        for (const auto& logoPath : logoPaths) {
+            unsigned char* imageData = stbi_load(logoPath.c_str(), &fungenLogoWidth, &fungenLogoHeight, &channels, 4);
+            if (imageData) {
+                glGenTextures(1, &fungenLogoTexture);
+                glBindTexture(GL_TEXTURE_2D, fungenLogoTexture);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, fungenLogoWidth, fungenLogoHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+                stbi_image_free(imageData);
+                LOGF_INFO("Loaded FunGen logo from: %s", logoPath.c_str());
+                break;
+            }
+        }
+        if (fungenLogoTexture == 0) {
+            LOG_WARN("Failed to load FunGen logo from any path");
+        }
+    }
+
     ImGui::Begin(TR(ABOUT), open, ImGuiWindowFlags_None | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse);
+
+    // Display FunGen logo if loaded
+    if (fungenLogoTexture != 0) {
+        float logoDisplayWidth = 150.0f;
+        float logoDisplayHeight = (float)fungenLogoHeight * (logoDisplayWidth / (float)fungenLogoWidth);
+        float cursorX = (ImGui::GetContentRegionAvail().x - logoDisplayWidth) * 0.5f;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cursorX);
+        ImGui::Image((void*)(intptr_t)fungenLogoTexture, ImVec2(logoDisplayWidth, logoDisplayHeight));
+        ImGui::Spacing();
+    }
+
+    // FunGen Edition branding header
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.3f, 1.0f)); // Green color
+    ImGui::SetWindowFontScale(1.3f);
+    ImGui::TextUnformatted("FunGen Edition");
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::PopStyleColor();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.9f, 0.6f, 1.0f)); // Light green
+    ImGui::TextUnformatted("MacOS Silicon Native Build");
+    ImGui::PopStyleColor();
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
     ImGui::TextUnformatted("OpenFunscripter " OFS_LATEST_GIT_TAG);
     ImGui::Text("%s: %s", TR(GIT_COMMIT), OFS_LATEST_GIT_HASH);
 
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Custom build info
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.2f, 1.0f)); // Yellow
+    ImGui::TextUnformatted("Compiled by k00gar - Nov. 2024");
+    ImGui::PopStyleColor();
+
+    ImGui::Spacing();
+
+    // Donate button with color
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.8f, 1.0f)); // Blue
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.9f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.7f, 1.0f));
+    if (ImGui::Button("Donate & Support", ImVec2(-1.f, 0.f))) {
+        Util::OpenUrl("https://ko-fi.com/k00gar");
+    }
+    ImGui::PopStyleColor(3);
+    OFS::Tooltip("Support k00gar at ko-fi.com/k00gar");
+
+    ImGui::Spacing();
     if (ImGui::Button(FMT("%s " ICON_GITHUB, TR(LATEST_RELEASE)), ImVec2(-1.f, 0.f))) {
         Util::OpenUrl("https://github.com/OpenFunscripter/OFS/releases/latest");
     }

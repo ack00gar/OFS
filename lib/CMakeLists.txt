@@ -107,6 +107,10 @@ set(SDL_LIBC ON CACHE BOOL "" FORCE)
 set(SDL_DIRECTX OFF CACHE BOOL "" FORCE)
 set(SDL_RENDER_D3D OFF CACHE BOOL "" FORCE)
 set(SDL_VULKAN OFF CACHE BOOL "" FORCE)
+# Fix for macOS ARM compilation - allow C99 style declarations
+if(APPLE)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error=declaration-after-statement")
+endif()
 add_subdirectory("SDL2/")
 
 

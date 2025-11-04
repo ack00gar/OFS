@@ -23,7 +23,7 @@ OFS_ScriptAPI::OFS_ScriptAPI(sol::usertype<class OFS_ExtensionAPI>& ofs) noexcep
         sol::constructors<LuaFunscriptAction(lua_Number, lua_Integer), LuaFunscriptAction(lua_Number, lua_Integer, bool)>());
     action["at"] = sol::property(&LuaFunscriptAction::at, &LuaFunscriptAction::set_at);
     action["pos"] = sol::property(&LuaFunscriptAction::pos, &LuaFunscriptAction::set_pos);
-    action["selected"] = &LuaFunscriptAction::selected;
+    action["selected"] = sol::property(&LuaFunscriptAction::get_selected, &LuaFunscriptAction::set_selected);
 
     ofs["ActiveIdx"] = OFS_ScriptAPI::ActiveIdx;
     ofs["Script"] = OFS_ScriptAPI::Script;

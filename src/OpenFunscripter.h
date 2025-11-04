@@ -56,6 +56,11 @@ private:
 
     char tmpBuf[2][32];
 
+    // FunGen Edition logo texture
+    uint32_t fungenLogoTexture = 0;
+    int fungenLogoWidth = 0;
+    int fungenLogoHeight = 0;
+
     void setIdle(bool idle) noexcept;
     void registerBindings();
 

@@ -40,7 +40,20 @@ bool OFS_MpvLoader::Load() noexcept
 #if defined(WIN32)
     mpvHandle = SDL_LoadObject("mpv-2.dll");
 #elif defined(__APPLE__)
+    // Try multiple locations for macOS
     mpvHandle = SDL_LoadObject("libmpv.dylib");
+    if (!mpvHandle) {
+        LOGF_DEBUG("Failed loading libmpv.dylib: %s", SDL_GetError());
+        mpvHandle = SDL_LoadObject("/usr/local/opt/mpv/lib/libmpv.dylib");
+    }
+    if (!mpvHandle) {
+        LOGF_DEBUG("Failed loading from /usr/local/opt/mpv: %s", SDL_GetError());
+        mpvHandle = SDL_LoadObject("/opt/homebrew/opt/mpv/lib/libmpv.dylib");
+    }
+    if (!mpvHandle) {
+        LOGF_DEBUG("Failed loading from /opt/homebrew: %s", SDL_GetError());
+        mpvHandle = SDL_LoadObject("libmpv.2.dylib");
+    }
 #else // linux
     mpvHandle = SDL_LoadObject("libmpv.so.2");
     if (!mpvHandle) {
@@ -49,6 +62,7 @@ bool OFS_MpvLoader::Load() noexcept
 #endif
 
     if (!mpvHandle) {
+        LOG_ERROR("Failed to load mpv library.");
         LOGF_ERROR("%s", SDL_GetError());
         return false;
     }

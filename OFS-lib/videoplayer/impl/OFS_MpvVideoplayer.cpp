@@ -207,6 +207,19 @@ bool OFS_Videoplayer::Init(bool hwAccel) noexcept
         }
     }
 
+#if defined(__APPLE__) && defined(__arm64__)
+    // Force software decoding on M1/M2 Macs
+    hwAccel = false;
+    error = mpv_set_option_string(CTX->mpv, "vo", "libmpv");
+    if(error != 0) {
+        LOG_WARN("Failed to set mpv: vo=libmpv");
+    }
+    error = mpv_set_option_string(CTX->mpv, "gpu-context", "cocoa");
+    if(error != 0) {
+        LOG_WARN("Failed to set mpv: gpu-context=cocoa");
+    }
+#endif
+
 #ifndef NDEBUG
     mpv_request_log_messages(CTX->mpv, "debug");
 #else
