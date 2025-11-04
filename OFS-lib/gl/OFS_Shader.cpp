@@ -47,7 +47,7 @@ ShaderBase::ShaderBase(const char* vtxShader, const char* fragShader) noexcept
 	}
 
 	glUseProgram(program);
-	glUniform1i(glGetUniformLocation(program, "Texture"), GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "Texture"), 0);  // Texture unit 0, not GL_TEXTURE0 enum!
 
 	// delete the shaders as they're linked into our program now and no longer necessary
 	glDeleteShader(vertex);
