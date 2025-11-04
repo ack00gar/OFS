@@ -20,7 +20,7 @@
 
 ## Features
 
-- ✅ **Native Apple Silicon (ARM64) support** - Runs natively on M1/M2/M3 Macs
+- ✅ **Native Apple Silicon (ARM64) support** - Runs natively on M1, M2, M3, M4, M5 Macs
 - ✅ **FunGen Edition branding** - Custom logo and About window
 - ✅ **Debug features enabled** - Includes "Reset layout" and other development tools
 - ✅ **macOS integration** - Native file explorer and URL opening
@@ -143,7 +143,7 @@ cmake --build build -j$(sysctl -n hw.ncpu)
 
 **Before building manually, ensure you have the correct mpv architecture:**
 ```bash
-# On Apple Silicon (M1/M2/M3), use ARM64 Homebrew
+# On Apple Silicon (M1, M2, M3, M4, M5), use ARM64 Homebrew
 /opt/homebrew/bin/brew install mpv
 
 # On Intel Macs, use standard Homebrew
