@@ -94,17 +94,30 @@ if(WIN32)
 
     if(MPV_DOWNLOAD_URL)
       message(STATUS "Downloading mpv from: ${MPV_DOWNLOAD_URL}")
-      file(DOWNLOAD "https://www.7-zip.org/a/7zr.exe" "7zr.exe" SHOW_PROGRESS)
-      file(DOWNLOAD ${MPV_DOWNLOAD_URL} "mpv-dev.7z" SHOW_PROGRESS)
+      file(DOWNLOAD "https://www.7-zip.org/a/7zr.exe" "${CMAKE_BINARY_DIR}/7zr.exe" SHOW_PROGRESS STATUS DOWNLOAD_7ZR_STATUS)
+      list(GET DOWNLOAD_7ZR_STATUS 0 DOWNLOAD_7ZR_CODE)
+      if(NOT DOWNLOAD_7ZR_CODE EQUAL 0)
+        message(FATAL_ERROR "Failed to download 7zr.exe")
+      endif()
+
+      file(DOWNLOAD ${MPV_DOWNLOAD_URL} "${CMAKE_BINARY_DIR}/mpv-dev.7z" SHOW_PROGRESS STATUS DOWNLOAD_MPV_STATUS)
+      list(GET DOWNLOAD_MPV_STATUS 0 DOWNLOAD_MPV_CODE)
+      if(NOT DOWNLOAD_MPV_CODE EQUAL 0)
+        message(FATAL_ERROR "Failed to download mpv archive")
+      endif()
+
       # Extract everything first
       execute_process(
-        COMMAND "${CMAKE_BINARY_DIR}/7zr.exe" "x" "-y" "mpv-dev.7z"
+        COMMAND "${CMAKE_BINARY_DIR}/7zr.exe" x -y "${CMAKE_BINARY_DIR}/mpv-dev.7z"
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         RESULT_VARIABLE EXTRACT_RESULT
-        OUTPUT_QUIET
+        OUTPUT_VARIABLE EXTRACT_OUTPUT
+        ERROR_VARIABLE EXTRACT_ERROR
       )
       if(NOT EXTRACT_RESULT EQUAL 0)
-        message(FATAL_ERROR "Failed to extract mpv archive")
+        message(STATUS "7zr.exe output: ${EXTRACT_OUTPUT}")
+        message(STATUS "7zr.exe error: ${EXTRACT_ERROR}")
+        message(FATAL_ERROR "Failed to extract mpv archive (exit code: ${EXTRACT_RESULT})")
       endif()
       # Find libmpv-2.dll and rename to mpv-2.dll
       file(GLOB_RECURSE MPV_DLL_PATH "${CMAKE_BINARY_DIR}/**/libmpv-2.dll")
