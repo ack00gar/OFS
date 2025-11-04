@@ -80,16 +80,33 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 
 if(WIN32)
   # download mpv binaries
-  # Using mpv-dev from August 2024 - for latest version see:
-  # https://sourceforge.net/projects/mpv-player-windows/files/libmpv/
+  # Using latest mpv build from zhongfly (updates daily)
+  # To manually use a specific version, download from:
+  # https://github.com/zhongfly/mpv-winbuild/releases
   if (NOT EXISTS "${CMAKE_BINARY_DIR}/mpv-2.dll")
-    file(DOWNLOAD "https://www.7-zip.org/a/7zr.exe" "7zr.exe" SHOW_PROGRESS)
-    file(DOWNLOAD "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-v3-20250824-git-5faec4e.7z/download" "mpv-dev.7z" SHOW_PROGRESS)
-    add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
+    message(STATUS "Fetching latest Windows mpv build info...")
+    file(DOWNLOAD "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest"
+         "${CMAKE_BINARY_DIR}/mpv-latest.json" SHOW_PROGRESS)
+
+    file(READ "${CMAKE_BINARY_DIR}/mpv-latest.json" MPV_JSON)
+    string(REGEX MATCH "\"browser_download_url\"[^\"]*\"([^\"]*mpv-dev-x86_64-v3[^\"]*\\.7z)\"" _ ${MPV_JSON})
+    set(MPV_DOWNLOAD_URL ${CMAKE_MATCH_1})
+
+    if(MPV_DOWNLOAD_URL)
+      message(STATUS "Downloading mpv from: ${MPV_DOWNLOAD_URL}")
+      file(DOWNLOAD "https://www.7-zip.org/a/7zr.exe" "7zr.exe" SHOW_PROGRESS)
+      file(DOWNLOAD ${MPV_DOWNLOAD_URL} "mpv-dev.7z" SHOW_PROGRESS)
+      execute_process(
         COMMAND "${CMAKE_BINARY_DIR}/7zr.exe" "x" "-y" "mpv-dev.7z" "mpv-2.dll"
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-        BYPRODUCTS "${CMAKE_BINARY_DIR}/mpv-2.dll"
-        DEPENDS "${CMAKE_BINARY_DIR}/mpv-dev.7z")
+        RESULT_VARIABLE EXTRACT_RESULT
+      )
+      if(NOT EXTRACT_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to extract mpv-2.dll")
+      endif()
+    else()
+      message(FATAL_ERROR "Could not find mpv download URL. Please manually download mpv-dev-x86_64-v3-*.7z from https://github.com/zhongfly/mpv-winbuild/releases")
+    endif()
   endif()
 
 	# copy mpv-2.dll to bin dir

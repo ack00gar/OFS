@@ -255,14 +255,14 @@ sudo pacman -S mpv
 
 ### Windows: mpv-2.dll
 
-The Windows build automatically downloads mpv-2.dll during compilation (August 2024 version).
+The Windows build **automatically downloads the latest mpv build** during compilation from [zhongfly/mpv-winbuild](https://github.com/zhongfly/mpv-winbuild/releases) (updated daily).
 
-**To use a newer version:**
-1. Download the latest `mpv-dev-x86_64-v3-*.7z` from [SourceForge](https://sourceforge.net/projects/mpv-player-windows/files/libmpv/)
+**If automatic download fails:**
+1. Download the latest `mpv-dev-x86_64-v3-*.7z` from [GitHub Releases](https://github.com/zhongfly/mpv-winbuild/releases/latest)
 2. Extract `mpv-2.dll` from the archive
-3. Replace the existing `mpv-2.dll` in your `build/` and `bin/` directories
+3. Place it in your `build/` directory before compiling
 
-**Note:** The build system downloads from SourceForge automatically. If you encounter download issues, manually download and extract to your build directory before compiling.
+The build system fetches the latest version automatically via GitHub API.
 
 ## Project Structure
 
