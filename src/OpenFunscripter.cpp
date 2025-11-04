@@ -2699,8 +2699,7 @@ void OpenFunscripter::ShowAboutWindow(bool* open) noexcept
         // Try multiple paths for the logo
         std::vector<std::string> logoPaths = {
             Util::Prefpath("fungen_logo.png"),
-            Util::Resource("data/fungen_logo.png"),
-            "/Users/k00gar/PycharmProjects/FunGen/streamer/static/logo.png"
+            Util::Resource("data/fungen_logo.png")
         };
 
         int channels;
