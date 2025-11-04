@@ -2741,9 +2741,11 @@ void OpenFunscripter::ShowAboutWindow(bool* open) noexcept
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleColor();
 
+#if __APPLE__
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.9f, 0.6f, 1.0f)); // Light green
-    ImGui::TextUnformatted("MacOS Silicon Native Build");
+    ImGui::TextUnformatted("macOS Silicon Native Build");
     ImGui::PopStyleColor();
+#endif
 
     ImGui::Spacing();
     ImGui::Separator();
