@@ -1,6 +1,6 @@
 # OpenFunscripter - FunGen Edition
 
-**FunGen Edition** is a customized build of OpenFunscripter optimized for macOS Apple Silicon with enhanced features and branding.
+**FunGen Edition** is a customized build of OpenFunscripter optimized to fully support macOS Apple Silicon with enhanced upcoming features.
 
 ---
 
