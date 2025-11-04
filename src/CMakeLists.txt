@@ -96,13 +96,24 @@ if(WIN32)
       message(STATUS "Downloading mpv from: ${MPV_DOWNLOAD_URL}")
       file(DOWNLOAD "https://www.7-zip.org/a/7zr.exe" "7zr.exe" SHOW_PROGRESS)
       file(DOWNLOAD ${MPV_DOWNLOAD_URL} "mpv-dev.7z" SHOW_PROGRESS)
+      # Extract everything first
       execute_process(
-        COMMAND "${CMAKE_BINARY_DIR}/7zr.exe" "x" "-y" "mpv-dev.7z" "mpv-2.dll"
+        COMMAND "${CMAKE_BINARY_DIR}/7zr.exe" "x" "-y" "mpv-dev.7z"
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         RESULT_VARIABLE EXTRACT_RESULT
+        OUTPUT_QUIET
       )
       if(NOT EXTRACT_RESULT EQUAL 0)
-        message(FATAL_ERROR "Failed to extract mpv-2.dll")
+        message(FATAL_ERROR "Failed to extract mpv archive")
+      endif()
+      # Find mpv-2.dll in extracted files
+      file(GLOB_RECURSE MPV_DLL_PATH "${CMAKE_BINARY_DIR}/**/mpv-2.dll")
+      if(MPV_DLL_PATH)
+        list(GET MPV_DLL_PATH 0 MPV_DLL_PATH)
+        file(COPY ${MPV_DLL_PATH} DESTINATION "${CMAKE_BINARY_DIR}")
+        message(STATUS "Found and copied mpv-2.dll")
+      else()
+        message(FATAL_ERROR "Could not find mpv-2.dll in extracted archive")
       endif()
     else()
       message(FATAL_ERROR "Could not find mpv download URL. Please manually download mpv-dev-x86_64-v3-*.7z from https://github.com/zhongfly/mpv-winbuild/releases")
