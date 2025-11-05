@@ -38,7 +38,7 @@ bool OFS_MpvLoader::Load() noexcept
 {
     if (mpvHandle) return true;
 #if defined(WIN32)
-    mpvHandle = SDL_LoadObject("mpv-2.dll");
+    mpvHandle = SDL_LoadObject("libmpv-2.dll");
 #elif defined(__APPLE__)
     // Try multiple locations for macOS
     mpvHandle = SDL_LoadObject("libmpv.dylib");

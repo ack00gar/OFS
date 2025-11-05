@@ -322,13 +322,13 @@ sudo dnf install mpv-libs-devel
 sudo pacman -S mpv
 ```
 
-### Windows: mpv-2.dll
+### Windows: libmpv-2.dll
 
 The Windows build **automatically downloads the latest mpv build** during compilation from [zhongfly/mpv-winbuild](https://github.com/zhongfly/mpv-winbuild/releases) (updated daily).
 
 **If automatic download fails:**
 1. Download the latest `mpv-dev-x86_64-*.7z` (standard build, **NOT** the v3 variant) from [GitHub Releases](https://github.com/zhongfly/mpv-winbuild/releases/latest)
-2. Extract `mpv-2.dll` from the archive
+2. Extract `libmpv-2.dll` from the archive
 3. Place it in your `build/` directory before compiling
 
 **Note:** Use the standard `mpv-dev-x86_64-*.7z` build for maximum compatibility. The v3 variant (`mpv-dev-x86_64-v3-*.7z`) requires newer CPUs with AVX2 support and may not work on older systems.

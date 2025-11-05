@@ -83,7 +83,7 @@ if(WIN32)
   # Using latest mpv build from zhongfly (updates daily)
   # To manually use a specific version, download from:
   # https://github.com/zhongfly/mpv-winbuild/releases
-  if (NOT EXISTS "${CMAKE_BINARY_DIR}/mpv-2.dll")
+  if (NOT EXISTS "${CMAKE_BINARY_DIR}/libmpv-2.dll")
     message(STATUS "Fetching latest Windows mpv build info...")
     file(DOWNLOAD "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest"
          "${CMAKE_BINARY_DIR}/mpv-latest.json" SHOW_PROGRESS)
@@ -121,13 +121,12 @@ if(WIN32)
         message(STATUS "7zr.exe error: ${EXTRACT_ERROR}")
         message(FATAL_ERROR "Failed to extract mpv archive (exit code: ${EXTRACT_RESULT})")
       endif()
-      # Find libmpv-2.dll and rename to mpv-2.dll
+      # Find and copy libmpv-2.dll
       file(GLOB_RECURSE MPV_DLL_PATH "${CMAKE_BINARY_DIR}/**/libmpv-2.dll")
       if(MPV_DLL_PATH)
         list(GET MPV_DLL_PATH 0 MPV_DLL_PATH)
         file(COPY ${MPV_DLL_PATH} DESTINATION "${CMAKE_BINARY_DIR}")
-        file(RENAME "${CMAKE_BINARY_DIR}/libmpv-2.dll" "${CMAKE_BINARY_DIR}/mpv-2.dll")
-        message(STATUS "Found libmpv-2.dll and renamed to mpv-2.dll")
+        message(STATUS "Found and copied libmpv-2.dll")
       else()
         message(FATAL_ERROR "Could not find libmpv-2.dll in extracted archive")
       endif()
@@ -136,11 +135,11 @@ if(WIN32)
     endif()
   endif()
 
-	# copy mpv-2.dll to bin dir
+	# copy libmpv-2.dll to bin dir
 	add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy
-                   "${CMAKE_BINARY_DIR}/mpv-2.dll" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/mpv-2.dll"
-				   DEPENDS "${CMAKE_BINARY_DIR}/mpv-2.dll")
+                   "${CMAKE_BINARY_DIR}/libmpv-2.dll" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/libmpv-2.dll"
+				   DEPENDS "${CMAKE_BINARY_DIR}/libmpv-2.dll")
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC
