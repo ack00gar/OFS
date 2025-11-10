@@ -780,8 +780,10 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 
 		uint32_t finalTexture = ctx->processingTexture;  // Default: use raw mpv output
 
-		if (needsProcessing && ctx->cropShader && ctx->vrShader && ctx->quadVAO) {
-			// Step 1: Apply VR crop shader (SBS/TB → single eye)
+		if (needsProcessing && ctx->cropShader && ctx->quadVAO) {
+			// For AI tracking: Only crop VR video to single eye
+			// NO unwarp shader - AI needs raw pixel data, not view-dependent projections
+			// VR unwarp is only for human viewing, not for AI processing
 			glBindFramebuffer(GL_FRAMEBUFFER, ctx->croppedFramebuffer);
 			glViewport(0, 0, MpvPlayerContext::PROCESSING_SIZE, MpvPlayerContext::PROCESSING_SIZE);
 			glClear(GL_COLOR_BUFFER_BIT);
@@ -797,55 +799,8 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 			glDrawArrays(GL_TRIANGLES, 0, 6);
 			glBindVertexArray(0);
 
-			// Step 2: Apply VrShader (same shader as main VR view window)
-			glBindFramebuffer(GL_FRAMEBUFFER, ctx->unwarpedFramebuffer);
-			glViewport(0, 0, MpvPlayerContext::PROCESSING_SIZE, MpvPlayerContext::PROCESSING_SIZE);
-			glClear(GL_COLOR_BUFFER_BIT);
-
-			ctx->vrShader->Use();
-
-			// Setup ortho projection for full-screen quad
-			float L = 0.0f;
-			float R = (float)MpvPlayerContext::PROCESSING_SIZE;
-			float T = 0.0f;
-			float B = (float)MpvPlayerContext::PROCESSING_SIZE;
-			const float ortho_projection[4][4] = {
-				{ 2.0f / (R - L), 0.0f, 0.0f, 0.0f },
-				{ 0.0f, 2.0f / (T - B), 0.0f, 0.0f },
-				{ 0.0f, 0.0f, -1.0f, 0.0f },
-				{ (R + L) / (L - R), (T + B) / (B - T), 0.0f, 1.0f },
-			};
-			ctx->vrShader->ProjMtx(&ortho_projection[0][0]);
-
-			// Convert pitch from UI (-90 to 90°) to VrShader format (0 to 1)
-			// VrShader expects rotation.y in range [0,1] where 0.5 is center
-			// pitch = -90° → rotation.y = 0.0 (looking down)
-			// pitch = 0°   → rotation.y = 0.5 (center)
-			// pitch = 90°  → rotation.y = 1.0 (looking up)
-			float pitchNormalized = 0.5f - (vrState.vrPitch / 180.0f);
-
-			// Yaw is already 0 from UI, keep it at 0.5 (center)
-			float yawNormalized = 0.5f;
-
-			float rotation[2] = { yawNormalized, pitchNormalized };
-			ctx->vrShader->Rotation(rotation);
-
-			// Use zoom from UI state
-			ctx->vrShader->Zoom(vrState.vrZoom);
-
-			// Aspect ratios
-			ctx->vrShader->AspectRatio(1.0f);  // 640x640 is square
-
-			// Video aspect after crop is square (single eye)
-			ctx->vrShader->VideoAspectRatio(1.0f);
-
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, ctx->croppedTexture);
-			glBindVertexArray(ctx->quadVAO);
-			glDrawArrays(GL_TRIANGLES, 0, 6);
-			glBindVertexArray(0);
-
-			finalTexture = ctx->unwarpedTexture;
+			// Use cropped texture (raw single eye, no unwarp)
+			finalTexture = ctx->croppedTexture;
 
 			// Reset state
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
