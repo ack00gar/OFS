@@ -100,4 +100,54 @@ public:
             });
         return it;
     }
+
+    // Helper functions that return both iterator and index
+    // Eliminates need for separate std::distance calls (O(1) optimization)
+    inline std::pair<typename std::vector<T, Allocator>::iterator, size_t>
+    lower_bound_idx(const T& a) noexcept
+    {
+        auto it = std::lower_bound(this->begin(), this->end(), a,
+            [](auto& a, auto& b) noexcept {
+                Comparison comp;
+                return comp(a, b);
+            });
+        size_t idx = it - this->begin();
+        return {it, idx};
+    }
+
+    inline std::pair<typename std::vector<T, Allocator>::const_iterator, size_t>
+    lower_bound_idx(const T& a) const noexcept
+    {
+        auto it = std::lower_bound(this->cbegin(), this->cend(), a,
+            [](auto& a, auto& b) noexcept {
+                Comparison comp;
+                return comp(a, b);
+            });
+        size_t idx = it - this->cbegin();
+        return {it, idx};
+    }
+
+    inline std::pair<typename std::vector<T, Allocator>::iterator, size_t>
+    upper_bound_idx(const T& a) noexcept
+    {
+        auto it = std::upper_bound(this->begin(), this->end(), a,
+            [](auto& a, auto& b) noexcept {
+                Comparison comp;
+                return comp(a, b);
+            });
+        size_t idx = it - this->begin();
+        return {it, idx};
+    }
+
+    inline std::pair<typename std::vector<T, Allocator>::const_iterator, size_t>
+    upper_bound_idx(const T& a) const noexcept
+    {
+        auto it = std::upper_bound(this->cbegin(), this->cend(), a,
+            [](auto& a, auto& b) noexcept {
+                Comparison comp;
+                return comp(a, b);
+            });
+        size_t idx = it - this->cbegin();
+        return {it, idx};
+    }
 };

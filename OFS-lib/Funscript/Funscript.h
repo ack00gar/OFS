@@ -139,9 +139,9 @@ private:
 		FunscriptAction* smallestErrorAction = nullptr;
 
 		int i = 0;
-		auto it = actions.lower_bound(FunscriptAction(time - maxErrorTime, 0));
+		auto [it, idx] = actions.lower_bound_idx(FunscriptAction(time - maxErrorTime, 0));
 		if (it != actions.end()) {
-			i = std::distance(actions.begin(), it);
+			i = idx;
 			if (i > 0) --i;
 		}
 

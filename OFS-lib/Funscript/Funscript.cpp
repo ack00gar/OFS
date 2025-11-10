@@ -77,9 +77,9 @@ float Funscript::GetPositionAtTime(float time) const noexcept
 	else if (data.Actions.size() == 1) return data.Actions[0].pos;
 
 	int i = 0;
-	auto it = data.Actions.lower_bound(FunscriptAction(time, 0));
+	auto [it, idx] = data.Actions.lower_bound_idx(FunscriptAction(time, 0));
 	if (it != data.Actions.end()) {
-		i = std::distance(data.Actions.begin(), it);
+		i = idx;
 		if (i > 0) --i;
 	}
 

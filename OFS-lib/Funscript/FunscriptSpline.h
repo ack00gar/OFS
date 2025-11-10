@@ -68,9 +68,9 @@ public:
 		else {
 			// cache miss
 			// lookup index
-			auto it = actions.upper_bound(FunscriptAction(time, 0));
-			if (it == actions.end()) { 
-				return actions.back().pos / 100.f; 
+			auto [it, idx] = actions.upper_bound_idx(FunscriptAction(time, 0));
+			if (it == actions.end()) {
+				return actions.back().pos / 100.f;
 			}
 			else if (it == actions.begin())			{
 				return actions.front().pos / 100.f;
@@ -78,7 +78,7 @@ public:
 
 			it--;
 			// cache index
-			cacheIdx = std::distance(actions.begin(), it);
+			cacheIdx = idx - 1;
 			return catmul_rom_spline_alt(actions, cacheIdx, time);
 		}
 

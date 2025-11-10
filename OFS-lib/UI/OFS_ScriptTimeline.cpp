@@ -306,31 +306,37 @@ void ScriptTimeline::ShowScriptPositions(
 			);
 		}
 
-		auto startIt = script->Actions().lower_bound(FunscriptAction(drawingCtx.offsetTime, 0));
+		auto [startIt, startIdx] = script->Actions().lower_bound_idx(FunscriptAction(drawingCtx.offsetTime, 0));
 		if (startIt != script->Actions().begin()) {
 		    startIt -= 1;
+		    startIdx -= 1;
 		}
 
-		auto endIt = script->Actions().lower_bound(FunscriptAction(drawingCtx.offsetTime + visibleTime, 0));
+		auto [endIt, endIdx] = script->Actions().lower_bound_idx(FunscriptAction(drawingCtx.offsetTime + visibleTime, 0));
 		if (endIt != script->Actions().end()) {
 		    endIt += 1;
+		    endIdx += 1;
 		}
 
-		drawingCtx.actionFromIdx = std::distance(script->Actions().begin(), startIt);
-		drawingCtx.actionToIdx = std::distance(script->Actions().begin(), endIt);
+		drawingCtx.actionFromIdx = startIdx;
+		drawingCtx.actionToIdx = endIdx;
 
 		if(script->HasSelection())
 		{
-			auto startIt = script->Selection().lower_bound(FunscriptAction(drawingCtx.offsetTime, 0));
-			if (startIt != script->Selection().begin())
+			auto [startIt, startIdx] = script->Selection().lower_bound_idx(FunscriptAction(drawingCtx.offsetTime, 0));
+			if (startIt != script->Selection().begin()) {
 				startIt -= 1;
+				startIdx -= 1;
+			}
 
-			auto endIt = script->Selection().lower_bound(FunscriptAction(drawingCtx.offsetTime + drawingCtx.visibleTime, 0));
-			if (endIt != script->Selection().end())
+			auto [endIt, endIdx] = script->Selection().lower_bound_idx(FunscriptAction(drawingCtx.offsetTime + drawingCtx.visibleTime, 0));
+			if (endIt != script->Selection().end()) {
 				endIt += 1;
+				endIdx += 1;
+			}
 
-			drawingCtx.selectionFromIdx = std::distance(script->Selection().begin(), startIt);
-			drawingCtx.selectionToIdx = std::distance(script->Selection().begin(), endIt);
+			drawingCtx.selectionFromIdx = startIdx;
+			drawingCtx.selectionToIdx = endIdx;
 		}
 		else 
 		{
