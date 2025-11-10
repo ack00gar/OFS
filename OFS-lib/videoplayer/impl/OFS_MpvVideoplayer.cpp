@@ -690,7 +690,7 @@ inline static void ProcessEvents(MpvPlayerContext* ctx) noexcept
 
 inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 {
-	// Path 1: MAIN DISPLAY RENDER (full resolution, untouched)
+	// Render once to main display FBO (full resolution)
 	mpv_opengl_fbo mainFbo = {0};
 	mainFbo.fbo = ctx->framebuffer;
 	mainFbo.w = ctx->data.videoWidth;
@@ -705,18 +705,11 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 	};
 	mpv_render_context_render(ctx->mpvGL, mainParams);
 
-	// Path 2: PROCESSING RENDER (downscaled for AI tracking)
+	// Path 2: PROCESSING PIPELINE (downsample from main texture for AI tracking)
 	// Only when tracking is active to avoid overhead
-	LOGF_INFO("Processing render check: trackingActive=%d, processingFramebuffer=%u",
-	          ctx->trackingActive, ctx->processingFramebuffer);
-
-	if (ctx->trackingActive && ctx->processingFramebuffer) {
-		LOG_INFO("Inside processing render block");
-
+	if (ctx->trackingActive && ctx->processingFramebuffer && *ctx->frameTexture) {
 		// Run VR detection if not done yet and dimensions are available
 		if (!ctx->vrDetectionDone && ctx->data.videoWidth > 0 && ctx->data.videoHeight > 0) {
-			LOGF_INFO("Running VR detection in render: %dx%d, path=%s",
-			          ctx->data.videoWidth, ctx->data.videoHeight, ctx->data.filePath.c_str());
 			ctx->vrFormat = OFS_VRFormatDetector::DetectFormat(
 				ctx->data.videoWidth,
 				ctx->data.videoHeight,
@@ -725,33 +718,28 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 			ctx->vrDetectionDone = true;
 
 			if (ctx->vrFormat.isVR) {
-				LOGF_INFO("VR video detected: %s layout, %s projection, confidence: %.2f",
+				LOGF_INFO("VR video detected: %s layout, %s projection",
 				         ctx->vrFormat.layout == VRLayout::SideBySide ? "SBS" :
 				         ctx->vrFormat.layout == VRLayout::TopBottom ? "TB" : "Mono",
 				         ctx->vrFormat.projection == VRProjection::Equirectangular180 ? "Equirect180" :
 				         ctx->vrFormat.projection == VRProjection::Equirectangular360 ? "Equirect360" :
 				         ctx->vrFormat.projection == VRProjection::Fisheye190 ? "Fisheye190" :
-				         ctx->vrFormat.projection == VRProjection::Fisheye200 ? "Fisheye200" : "None",
-				         ctx->vrFormat.confidence);
+				         ctx->vrFormat.projection == VRProjection::Fisheye200 ? "Fisheye200" : "None");
 			} else {
 				LOG_INFO("2D video detected");
 			}
 		}
 
-		// For now: just render to 640x640 without crop
-		// TODO: Implement VR crop using a different method (shader-based or viewport)
-		mpv_opengl_fbo procFbo = {0};
-		procFbo.fbo = ctx->processingFramebuffer;
-		procFbo.w = MpvPlayerContext::PROCESSING_SIZE;
-		procFbo.h = MpvPlayerContext::PROCESSING_SIZE;
-		procFbo.internal_format = OFS_InternalTexFormat;
-
-		mpv_render_param procParams[] = {
-			{MPV_RENDER_PARAM_OPENGL_FBO, &procFbo},
-			{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &disable},
-			mpv_render_param{}
-		};
-		mpv_render_context_render(ctx->mpvGL, procParams);
+		// Downsample main texture to 640x640 processing texture
+		// Use glBlitFramebuffer for efficient GPU-side downscale
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, ctx->framebuffer);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, ctx->processingFramebuffer);
+		glBlitFramebuffer(
+			0, 0, ctx->data.videoWidth, ctx->data.videoHeight,
+			0, 0, MpvPlayerContext::PROCESSING_SIZE, MpvPlayerContext::PROCESSING_SIZE,
+			GL_COLOR_BUFFER_BIT, GL_LINEAR
+		);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		// GPU-based VR processing pipeline using VrShader (same as main window)
 		// Pipeline: crop (SBS/TB → single eye) → VrShader unwarp → readback
