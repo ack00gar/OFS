@@ -53,6 +53,14 @@ inline static std::string getTriggerText(const OFS_ActionTrigger& trigger) noexc
         {
             addMod(mods, TR(KEY_MOD_SHIFT));
         }
+        if(trigger.Mod & ImGuiMod_Super)
+        {
+#ifdef __APPLE__
+            addMod(mods, "⌘");  // Command symbol on macOS
+#else
+            addMod(mods, "Super");  // Windows key / Super on other platforms
+#endif
+        }
     }
 
     if(trigger.Key != ImGuiKey_None)
