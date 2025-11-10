@@ -708,6 +708,9 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 	// Path 2: PROCESSING PIPELINE (downsample from main texture for AI tracking)
 	// Only when tracking is active to avoid overhead
 	if (ctx->trackingActive && ctx->processingFramebuffer && *ctx->frameTexture) {
+		LOGF_INFO("Processing pipeline active: framebuffer=%u, texture=%u, videoSize=%dx%d",
+		          ctx->processingFramebuffer, *ctx->frameTexture, ctx->data.videoWidth, ctx->data.videoHeight);
+
 		// Run VR detection if not done yet and dimensions are available
 		if (!ctx->vrDetectionDone && ctx->data.videoWidth > 0 && ctx->data.videoHeight > 0) {
 			ctx->vrFormat = OFS_VRFormatDetector::DetectFormat(
@@ -740,6 +743,14 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 			GL_COLOR_BUFFER_BIT, GL_LINEAR
 		);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		LOG_INFO("Blit completed, checking GL error...");
+		GLenum err = glGetError();
+		if (err != GL_NO_ERROR) {
+			LOGF_ERROR("OpenGL error after blit: 0x%x", err);
+		} else {
+			LOG_INFO("Blit successful, no GL errors");
+		}
 
 		// GPU-based VR processing pipeline using VrShader (same as main window)
 		// Pipeline: crop (SBS/TB → single eye) → VrShader unwarp → readback
@@ -845,6 +856,8 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 		int readIndex = ctx->processingPBOIndex;
 		int writeIndex = (ctx->processingPBOIndex + 1) % 2;
 
+		LOGF_INFO("PBO readback: finalTexture=%u, readIndex=%d, writeIndex=%d", finalTexture, readIndex, writeIndex);
+
 		// Bind the final texture for reading (could be raw, cropped, or unwarped)
 		glBindTexture(GL_TEXTURE_2D, finalTexture);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, ctx->processingPBO[writeIndex]);
@@ -855,6 +868,17 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 		const uint8_t* frameData = (const uint8_t*)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
 
 		if (frameData) {
+			// Check if data is non-zero (basic sanity check)
+			bool hasData = false;
+			for (int i = 0; i < 1000; i++) {
+				if (frameData[i] != 0) {
+					hasData = true;
+					break;
+				}
+			}
+			LOGF_INFO("PBO mapped successfully, hasData=%d, first bytes: %02x %02x %02x %02x",
+			          hasData, frameData[0], frameData[1], frameData[2], frameData[3]);
+
 			// Emit event with processing frame data
 			double timeSeconds = ctx->data.duration * ctx->data.percentPos;
 			EV::Enqueue<ProcessingFrameReadyEvent>(
@@ -867,7 +891,11 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 				ctx->data.videoHeight
 			);
 
+			LOG_INFO("ProcessingFrameReadyEvent enqueued");
+
 			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+		} else {
+			LOG_ERROR("Failed to map PBO for frame readback");
 		}
 
 		// Unbind PBO
