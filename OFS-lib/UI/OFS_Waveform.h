@@ -10,11 +10,19 @@
 
 
 
+// LOD level for efficient waveform rendering at different zoom levels
+struct WaveformLODLevel
+{
+	std::vector<float> maxValues;  // Pre-computed max values for this LOD
+	int samplesPerPixel;           // How many samples each value represents
+};
+
 // helper class to render audio waves
 class OFS_Waveform
 {
 	bool generating = false;
 	std::vector<float> samples;
+	std::vector<WaveformLODLevel> lodLevels;  // LOD pyramid for fast rendering
 public:
 
 	inline bool BusyGenerating() noexcept { return generating; }
@@ -23,11 +31,13 @@ public:
 
 	inline void Clear() noexcept {
 		samples.clear();
+		lodLevels.clear();
 	}
 
 	inline void SetSamples(std::vector<float>&& samples) noexcept
 	{
 		this->samples = std::move(samples);
+		BuildLODPyramid();
 	}
 
 	inline const std::vector<float>& Samples() const noexcept { return samples; }
@@ -35,6 +45,10 @@ public:
 	inline size_t SampleCount() const noexcept {
 		return samples.size();
 	}
+
+	// LOD pyramid methods
+	void BuildLODPyramid() noexcept;
+	const WaveformLODLevel* GetLODForSamplesPerPixel(int samplesPerPixel) const noexcept;
 };
 
 struct OFS_WaveformLOD

@@ -54,6 +54,7 @@ bool OFS_Waveform::LoadFlac(const std::string& output) noexcept
 		sample = Util::MapRange(sample, minSample, maxSample, -1.f, 1.f);
 	}
 
+	BuildLODPyramid();
 	return true;
 }
 
@@ -104,6 +105,71 @@ bool OFS_Waveform::GenerateAndLoadFlac(const std::string& ffmpegPath, const std:
 	return true;
 }
 
+void OFS_Waveform::BuildLODPyramid() noexcept
+{
+	OFS_PROFILE(__FUNCTION__);
+
+	if (samples.empty()) {
+		lodLevels.clear();
+		return;
+	}
+
+	lodLevels.clear();
+
+	// Build LOD pyramid: 1, 10, 100, 1000, 10000... samples per pixel
+	// Stop when we reach a level with < 100 pixels worth of data
+	int samplesPerPixel = 1;
+	while (samplesPerPixel <= (int)samples.size() / 100) {
+		WaveformLODLevel level;
+		level.samplesPerPixel = samplesPerPixel;
+
+		// Pre-compute max values for this LOD level
+		for (size_t i = 0; i < samples.size(); i += samplesPerPixel) {
+			float maxVal = 0.0f;
+
+			// Find max in this chunk
+			for (int j = 0; j < samplesPerPixel && (i + j) < samples.size(); ++j) {
+				float s = std::abs(samples[i + j]);
+				maxVal = Util::Max(maxVal, s);
+			}
+
+			level.maxValues.push_back(maxVal);
+		}
+
+		lodLevels.push_back(std::move(level));
+		LOGF_INFO("Waveform LOD %d: %d pixels (%d samples/px)",
+				  (int)lodLevels.size() - 1,
+				  (int)level.maxValues.size(),
+				  samplesPerPixel);
+
+		// Next LOD level is 10x coarser
+		samplesPerPixel *= 10;
+	}
+
+	LOGF_INFO("Waveform LOD pyramid built: %d levels for %d samples",
+			  (int)lodLevels.size(), (int)samples.size());
+}
+
+const WaveformLODLevel* OFS_Waveform::GetLODForSamplesPerPixel(int samplesPerPixel) const noexcept
+{
+	if (lodLevels.empty()) {
+		return nullptr;
+	}
+
+	// Find best LOD level (closest match without going under)
+	const WaveformLODLevel* bestLOD = &lodLevels[0];
+
+	for (const auto& level : lodLevels) {
+		if (level.samplesPerPixel <= samplesPerPixel) {
+			bestLOD = &level;
+		} else {
+			break;  // LOD levels are sorted, so we can stop
+		}
+	}
+
+	return bestLOD;
+}
+
 void OFS_WaveformLOD::Init() noexcept
 {
 	glGenTextures(1, &WaveformTex);
@@ -142,37 +208,66 @@ void OFS_WaveformLOD::Update(const OverlayDrawingCtx& ctx) noexcept
 			OFS_PROFILE("WaveformScrolling");
 			std::memcpy(lineBuf.data(), lineBuf.data() + scrollBy, sizeof(float) * (lineBuf.size() - scrollBy));
 			lineBuf.resize(lineBuf.size() - scrollBy);
-			
-			int addedCount = 0;
-			float maxSample;
-			for(int32_t i = endIndexF - (everyNth*scrollBy); i <= endIndexF; i += everyNth) {
-				maxSample = 0.f;
-				for(int32_t j=0; j < everyNth; j += 1) {
-					int32_t currentIndex = i + j;
-					if(currentIndex >= 0 && currentIndex < totalSampleCount) {
-						float s = std::abs(samples[currentIndex]);
-						maxSample = Util::Max(maxSample, s);
-					}
+
+			// Use LOD pyramid for fast lookup
+			const WaveformLODLevel* lod = data.GetLODForSamplesPerPixel((int)everyNth);
+
+			if (lod && lod->samplesPerPixel > 1) {
+				// Fast path: Direct LOD lookup (no nested loop!)
+				int lodStartIdx = (int)((endIndexF - (everyNth*scrollBy)) / lod->samplesPerPixel);
+				int lodEndIdx = (int)(endIndexF / lod->samplesPerPixel);
+
+				for (int lodIdx = lodStartIdx; lodIdx <= lodEndIdx && lodIdx < (int)lod->maxValues.size(); ++lodIdx) {
+					lineBuf.emplace_back(lod->maxValues[lodIdx]);
+					if ((int)lineBuf.size() >= (int)(lastCanvasX / 3.f + scrollBy)) break;
 				}
-				lineBuf.emplace_back(maxSample);
-				addedCount += 1; 
-				if(addedCount == scrollBy) break;
+			} else {
+				// Fallback: Original nested loop (for fine-grained zoom)
+				int addedCount = 0;
+				float maxSample;
+				for(int32_t i = endIndexF - (everyNth*scrollBy); i <= endIndexF; i += everyNth) {
+					maxSample = 0.f;
+					for(int32_t j=0; j < everyNth; j += 1) {
+						int32_t currentIndex = i + j;
+						if(currentIndex >= 0 && currentIndex < totalSampleCount) {
+							float s = std::abs(samples[currentIndex]);
+							maxSample = Util::Max(maxSample, s);
+						}
+					}
+					lineBuf.emplace_back(maxSample);
+					addedCount += 1;
+					if(addedCount == scrollBy) break;
+				}
 			}
-			assert(addedCount == scrollBy);
 		} else if(scrollBy != 0) {
 			OFS_PROFILE("WaveformUpdate");
 			lineBuf.clear();
-			float maxSample;
-			for(int32_t i = startIndexF; i <= endIndexF; i += everyNth) {
-				maxSample = 0.f;
-				for(int32_t j=0; j < everyNth; j += 1) {
-					int32_t currentIndex = i + j;
-					if(currentIndex >= 0 && currentIndex < totalSampleCount) {
-						float s = std::abs(samples[currentIndex]);
-						maxSample = Util::Max(maxSample, s);
-					}
+
+			// Use LOD pyramid for fast lookup
+			const WaveformLODLevel* lod = data.GetLODForSamplesPerPixel((int)everyNth);
+
+			if (lod && lod->samplesPerPixel > 1) {
+				// Fast path: Direct LOD lookup (no nested loop!)
+				int lodStartIdx = (int)(startIndexF / lod->samplesPerPixel);
+				int lodEndIdx = (int)(endIndexF / lod->samplesPerPixel);
+
+				for (int lodIdx = lodStartIdx; lodIdx <= lodEndIdx && lodIdx < (int)lod->maxValues.size(); ++lodIdx) {
+					lineBuf.emplace_back(lod->maxValues[lodIdx]);
 				}
-				lineBuf.emplace_back(maxSample);
+			} else {
+				// Fallback: Original nested loop (for fine-grained zoom)
+				float maxSample;
+				for(int32_t i = startIndexF; i <= endIndexF; i += everyNth) {
+					maxSample = 0.f;
+					for(int32_t j=0; j < everyNth; j += 1) {
+						int32_t currentIndex = i + j;
+						if(currentIndex >= 0 && currentIndex < totalSampleCount) {
+							float s = std::abs(samples[currentIndex]);
+							maxSample = Util::Max(maxSample, s);
+						}
+					}
+					lineBuf.emplace_back(maxSample);
+				}
 			}
 		}
 
