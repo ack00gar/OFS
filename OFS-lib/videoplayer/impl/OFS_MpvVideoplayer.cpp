@@ -138,6 +138,76 @@ inline static void notifyPlaybackSpeed(MpvPlayerContext* ctx) noexcept
     EV::Enqueue<PlaybackSpeedChangeEvent>((float)CTX->data.currentSpeed, CTX->playerType);
 }
 
+inline static void cleanupOpenGLResources(MpvPlayerContext* ctx) noexcept
+{
+	// Clean up processing pipeline resources
+	if (ctx->processingFramebuffer) {
+		glDeleteFramebuffers(1, &ctx->processingFramebuffer);
+		ctx->processingFramebuffer = 0;
+	}
+	if (ctx->processingTexture) {
+		glDeleteTextures(1, &ctx->processingTexture);
+		ctx->processingTexture = 0;
+	}
+	if (ctx->processingPBO[0] || ctx->processingPBO[1]) {
+		glDeleteBuffers(2, ctx->processingPBO);
+		ctx->processingPBO[0] = 0;
+		ctx->processingPBO[1] = 0;
+	}
+
+	// Clean up VR pipeline FBOs
+	if (ctx->fullResFramebuffer) {
+		glDeleteFramebuffers(1, &ctx->fullResFramebuffer);
+		ctx->fullResFramebuffer = 0;
+	}
+	if (ctx->fullResTexture) {
+		glDeleteTextures(1, &ctx->fullResTexture);
+		ctx->fullResTexture = 0;
+	}
+	if (ctx->croppedFramebuffer) {
+		glDeleteFramebuffers(1, &ctx->croppedFramebuffer);
+		ctx->croppedFramebuffer = 0;
+	}
+	if (ctx->croppedTexture) {
+		glDeleteTextures(1, &ctx->croppedTexture);
+		ctx->croppedTexture = 0;
+	}
+	if (ctx->unwarpedFramebuffer) {
+		glDeleteFramebuffers(1, &ctx->unwarpedFramebuffer);
+		ctx->unwarpedFramebuffer = 0;
+	}
+	if (ctx->unwarpedTexture) {
+		glDeleteTextures(1, &ctx->unwarpedTexture);
+		ctx->unwarpedTexture = 0;
+	}
+
+	// Clean up quad VAO/VBO
+	if (ctx->quadVAO) {
+		glDeleteVertexArrays(1, &ctx->quadVAO);
+		ctx->quadVAO = 0;
+	}
+	if (ctx->quadVBO) {
+		glDeleteBuffers(1, &ctx->quadVBO);
+		ctx->quadVBO = 0;
+	}
+
+	// Clean up shaders
+	if (ctx->cropShader) {
+		delete ctx->cropShader;
+		ctx->cropShader = nullptr;
+	}
+	if (ctx->vrShader) {
+		delete ctx->vrShader;
+		ctx->vrShader = nullptr;
+	}
+
+	// Clean up main framebuffer
+	if (ctx->framebuffer) {
+		glDeleteFramebuffers(1, &ctx->framebuffer);
+		ctx->framebuffer = 0;
+	}
+}
+
 inline static void updateProcessingFBO(MpvPlayerContext* ctx) noexcept
 {
 	// Create processing FBO for AI tracking (YOLO, optical flow, etc.)
@@ -335,6 +405,9 @@ inline static void showText(MpvPlayerContext* ctx, const char* text) noexcept
 
 OFS_Videoplayer::~OFS_Videoplayer() noexcept
 {
+    // Clean up OpenGL resources before destroying mpv context
+    cleanupOpenGLResources(CTX);
+
     mpv_render_context_free(CTX->mpvGL);
 	mpv_destroy(CTX->mpv);
     delete CTX;
