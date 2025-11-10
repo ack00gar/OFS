@@ -19,7 +19,7 @@ bool OFS_ProcessingVideoWindow::Init() noexcept
 		ProcessingFrameReadyEvent::HandleEvent(EVENT_SYSTEM_BIND(this, &OFS_ProcessingVideoWindow::updateProcessingFrame)));
 
 	// Use 'this' pointer as seed to ensure unique ID per instance
-	videoImageId = ImGui::GetIDWithSeed("processingVideoImage", 0, reinterpret_cast<ImGuiID>(this));
+	videoImageId = ImGui::GetIDWithSeed("processingVideoImage", 0, static_cast<ImGuiID>(reinterpret_cast<uintptr_t>(this)));
 
 	// Create OpenGL texture for processing frames
 	glGenTextures(1, &processingTexture);

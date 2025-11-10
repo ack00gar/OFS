@@ -25,7 +25,7 @@ bool OFS_VideoplayerWindow::Init(OFS_Videoplayer* player) noexcept
 		OFS_SDL_Event::HandleEvent(EVENT_SYSTEM_BIND(this, &OFS_VideoplayerWindow::mouseScroll)));
 	
 	// Use 'this' pointer as seed to ensure unique ID per instance
-	videoImageId = ImGui::GetIDWithSeed("videoImage", 0, reinterpret_cast<ImGuiID>(this));
+	videoImageId = ImGui::GetIDWithSeed("videoImage", 0, static_cast<ImGuiID>(reinterpret_cast<uintptr_t>(this)));
 	return true;
 }
 
