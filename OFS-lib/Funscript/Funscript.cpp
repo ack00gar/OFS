@@ -62,11 +62,11 @@ void Funscript::Update() noexcept
 	OFS_PROFILE(__FUNCTION__);
 	if (funscriptChanged) {
 		funscriptChanged = false;
-		EV::Enqueue<FunscriptActionsChangedEvent>(this);
+		EV::Enqueue<FunscriptActionsChangedEvent>(scriptId, title, data.Actions.size());
 	}
 	if (selectionChanged) {
 		selectionChanged = false;
-		EV::Enqueue<FunscriptSelectionChangedEvent>(this);
+		EV::Enqueue<FunscriptSelectionChangedEvent>(scriptId, title, data.Selection.size());
 	}
 }
 
@@ -680,14 +680,16 @@ void Funscript::UpdateRelativePath(const std::string& path) noexcept
 {
 	currentPathRelative = path;
 
-	if(!title.empty())
-	{
-		EV::Enqueue<FunscriptNameChangedEvent>(this, title);
-	}
+	std::string oldTitle = title;
 	title = Util::PathFromString(currentPathRelative)
 		.replace_extension("")
 		.filename()
 		.u8string();
+
+	if(!oldTitle.empty())
+	{
+		EV::Enqueue<FunscriptNameChangedEvent>(scriptId, title, oldTitle);
+	}
 }
 
 bool Funscript::Deserialize(const nlohmann::json& json, Funscript::Metadata* outMetadata, bool loadChapters) noexcept

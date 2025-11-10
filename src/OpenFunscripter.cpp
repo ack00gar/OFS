@@ -1370,14 +1370,14 @@ void OpenFunscripter::ExportClip(const ExportClipForChapter* ev) noexcept
 
 void OpenFunscripter::FunscriptChanged(const FunscriptActionsChangedEvent* ev) noexcept
 {
-    // the event passes the address of the Funscript
-    // by searching for the funscript with the same address
-    // the index can be retrieved
-    auto ptr = ev->Script;
-    for (int i = 0, size = LoadedFunscripts().size(); i < size; i += 1) {
-        if (LoadedFunscripts()[i].get() == ptr) {
-            extensions->ScriptChanged(i);
-            break;
+    // Use ID-based lookup to find the script index
+    auto script = LoadedProject->GetScriptById(ev->scriptId);
+    if (script) {
+        for (int i = 0, size = LoadedFunscripts().size(); i < size; i += 1) {
+            if (LoadedFunscripts()[i] == script) {
+                extensions->ScriptChanged(i);
+                break;
+            }
         }
     }
 

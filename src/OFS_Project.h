@@ -7,6 +7,7 @@
 #include <memory>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 class ProjectLoadedEvent: public OFS_Event<ProjectLoadedEvent> {
 public:
@@ -24,6 +25,10 @@ private:
 
     std::string notValidError;
     bool valid = false;
+
+    // Script registry for safe ID-based event handling
+    std::unordered_map<uint32_t, std::shared_ptr<Funscript>> scriptRegistry;
+    uint32_t nextScriptId = 1;
 
     void addError(const std::string& error) noexcept
     {
@@ -67,6 +72,11 @@ public:
     inline bool IsValid() const noexcept { return valid; }
     inline const std::string& NotValidError() const noexcept { return notValidError; }
     inline ProjectState& State() const noexcept { return ProjectState::State(stateHandle); }
+
+    // Script registry methods for safe ID-based event handling
+    uint32_t RegisterScript(std::shared_ptr<Funscript> script) noexcept;
+    std::shared_ptr<Funscript> GetScriptById(uint32_t id) const noexcept;
+    void UnregisterScript(uint32_t id) noexcept;
 
     void ExportFunscripts() noexcept;
     void ExportFunscripts(const std::string& outputDir) noexcept;

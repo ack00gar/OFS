@@ -229,9 +229,12 @@ OFS_WebsocketApi::OFS_WebsocketApi() noexcept
 			{
 				// Funscript name changes are handled as the old name being removed and the new one added
 				auto app = OpenFunscripter::ptr;
-				auto& projectState = app->LoadedProject->State();
-				eventSerializationCtx->Push<WsFunscriptRemove>(ev->oldName);
-				eventSerializationCtx->Push<WsFunscriptChange>(ev->Script->Title(), ev->Script->Data(), projectState.metadata);
+				auto script = app->LoadedProject->GetScriptById(ev->scriptId);
+				if (script) {
+					auto& projectState = app->LoadedProject->State();
+					eventSerializationCtx->Push<WsFunscriptRemove>(ev->oldName);
+					eventSerializationCtx->Push<WsFunscriptChange>(ev->newName, script->Data(), projectState.metadata);
+				}
 			}
 		}
 	));
@@ -284,16 +287,17 @@ OFS_WebsocketApi::OFS_WebsocketApi() noexcept
 			if(ClientsConnected() > 0)
 			{
 				auto app = OpenFunscripter::ptr;
-				auto it = std::find_if(app->LoadedFunscripts().begin(), app->LoadedFunscripts().end(), 
-					[Script = ev->Script](auto& script) noexcept { return script.get() == Script; });
-
-				if(it != app->LoadedFunscripts().end())
-				{
-					auto scriptIdx = std::distance(app->LoadedFunscripts().begin(), it);
-					if(scriptIdx + 1 > this->scriptUpdateCooldown.size()) {
-						scriptUpdateCooldown.resize(scriptIdx + 1, 0);
+				auto script = app->LoadedProject->GetScriptById(ev->scriptId);
+				if (script) {
+					auto it = std::find(app->LoadedFunscripts().begin(), app->LoadedFunscripts().end(), script);
+					if(it != app->LoadedFunscripts().end())
+					{
+						auto scriptIdx = std::distance(app->LoadedFunscripts().begin(), it);
+						if(scriptIdx + 1 > this->scriptUpdateCooldown.size()) {
+							scriptUpdateCooldown.resize(scriptIdx + 1, 0);
+						}
+						scriptUpdateCooldown[scriptIdx] = SDL_GetTicks();
 					}
-					scriptUpdateCooldown[scriptIdx] = SDL_GetTicks();
 				}
 			}
 		}

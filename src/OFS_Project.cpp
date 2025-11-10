@@ -72,7 +72,9 @@ inline bool FindMedia(const std::string& pathStr, std::string* outMedia) noexcep
 OFS_Project::OFS_Project() noexcept
 {
     stateHandle = OFS_ProjectState<ProjectState>::Register(ProjectState::StateName);
-    Funscripts.emplace_back(std::move(std::make_shared<Funscript>()));
+    auto script = std::make_shared<Funscript>();
+    RegisterScript(script);
+    Funscripts.emplace_back(std::move(script));
 }
 
 OFS_Project::~OFS_Project() noexcept
@@ -128,6 +130,14 @@ bool OFS_Project::Load(const std::string& path) noexcept
     if (valid) {
         auto& projectState = State();
         OFS_Binary::Deserialize(projectState.binaryFunscriptData, *this);
+
+        // Register all deserialized scripts
+        for (auto& script : Funscripts) {
+            if (script) {
+                RegisterScript(script);
+            }
+        }
+
         lastPath = path;
         loadNecessaryGlyphs();
     }
@@ -216,6 +226,7 @@ bool OFS_Project::AddFunscript(const std::string& path) noexcept
 				auto script = std::make_shared<Funscript>();
 				auto metadata = Funscript::Metadata();
 				if (script->Deserialize(json, &metadata, isFirstFunscript)) {
+					RegisterScript(script);
 					script = Funscripts.emplace_back(std::move(script));
 					script->UpdateRelativePath(MakePathRelative(path));
 					if (isFirstFunscript) {
@@ -235,6 +246,7 @@ bool OFS_Project::AddFunscript(const std::string& path) noexcept
 					if (!channelObj.contains("actions") || !channelObj["actions"].is_array()) continue;
 					auto scriptCh = std::make_shared<Funscript>();
 					if (scriptCh->Deserialize(channelObj, nullptr, false)) {
+						RegisterScript(scriptCh);
 						scriptCh = Funscripts.emplace_back(std::move(scriptCh));
 						// Synthesize a per-channel relative path for UI/export compatibility
 						auto base = Util::PathFromString(path);
@@ -265,6 +277,7 @@ bool OFS_Project::AddFunscript(const std::string& path) noexcept
 					std::string channelName = !axisId.empty() ? mapAxisIdToName(axisId) : std::string{"axis"};
 					auto scriptAxis = std::make_shared<Funscript>();
 					if (scriptAxis->Deserialize(axisObj, nullptr, false)) {
+						RegisterScript(scriptAxis);
 						scriptAxis = Funscripts.emplace_back(std::move(scriptAxis));
 						// Synthesize a per-axis relative path
 						auto base = Util::PathFromString(path);
@@ -285,6 +298,7 @@ bool OFS_Project::AddFunscript(const std::string& path) noexcept
 	auto metadata = Funscript::Metadata();
 	if (succ && script->Deserialize(json, &metadata, isFirstFunscript)) {
 		// Add existing script to project
+		RegisterScript(script);
 		script = Funscripts.emplace_back(std::move(script));
 		script->UpdateRelativePath(MakePathRelative(path));
 		if (isFirstFunscript) {
@@ -297,6 +311,7 @@ bool OFS_Project::AddFunscript(const std::string& path) noexcept
 	else {
 		// Add empty script to project
 		script = std::make_shared<Funscript>();
+		RegisterScript(script);
 		script->UpdateRelativePath(MakePathRelative(path));
 		script = Funscripts.emplace_back(std::move(script));
 	}
@@ -306,7 +321,9 @@ bool OFS_Project::AddFunscript(const std::string& path) noexcept
 void OFS_Project::RemoveFunscript(int32_t idx) noexcept
 {
     if (idx >= 0 && idx < Funscripts.size()) {
-        EV::Enqueue<FunscriptRemovedEvent>(Funscripts[idx]->Title());
+        auto& script = Funscripts[idx];
+        EV::Enqueue<FunscriptRemovedEvent>(script->Title());
+        UnregisterScript(script->ScriptId());
         Funscripts.erase(Funscripts.begin() + idx);
     }
 }
@@ -820,4 +837,29 @@ std::string OFS_Project::MediaPath() const noexcept
 {
     auto& projectState = State();
     return MakePathAbsolute(projectState.relativeMediaPath);
+}
+
+// Script registry implementation for safe ID-based event handling
+uint32_t OFS_Project::RegisterScript(std::shared_ptr<Funscript> script) noexcept
+{
+    if (!script) return 0;
+
+    uint32_t id = nextScriptId++;
+    script->SetScriptId(id);
+    scriptRegistry[id] = script;
+    return id;
+}
+
+std::shared_ptr<Funscript> OFS_Project::GetScriptById(uint32_t id) const noexcept
+{
+    auto it = scriptRegistry.find(id);
+    if (it != scriptRegistry.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+void OFS_Project::UnregisterScript(uint32_t id) noexcept
+{
+    scriptRegistry.erase(id);
 }

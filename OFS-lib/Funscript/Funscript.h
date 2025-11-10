@@ -23,29 +23,37 @@ class Funscript;
 class FunscriptActionsChangedEvent : public OFS_Event<FunscriptActionsChangedEvent>
 {
 	public:
-	// FIXME: get rid of this raw pointer
-	const Funscript* Script = nullptr;
-	FunscriptActionsChangedEvent(const Funscript* changedScript) noexcept
-		: Script(changedScript) {}
+	// Use ID-based lookup instead of raw pointer to avoid use-after-free
+	uint32_t scriptId = 0;
+	std::string scriptName;
+	int actionCount = 0;
+
+	FunscriptActionsChangedEvent(uint32_t id, const std::string& name, int count) noexcept
+		: scriptId(id), scriptName(name), actionCount(count) {}
 };
 
 class FunscriptSelectionChangedEvent : public OFS_Event<FunscriptSelectionChangedEvent>
 {
 	public:
-	// FIXME: get rid of this raw pointer
-	const Funscript* Script = nullptr;
-	FunscriptSelectionChangedEvent(const Funscript* changedScript) noexcept
-		: Script(changedScript) {}
+	// Use ID-based lookup instead of raw pointer to avoid use-after-free
+	uint32_t scriptId = 0;
+	std::string scriptName;
+	int selectedCount = 0;
+
+	FunscriptSelectionChangedEvent(uint32_t id, const std::string& name, int count) noexcept
+		: scriptId(id), scriptName(name), selectedCount(count) {}
 };
 
 class FunscriptNameChangedEvent : public OFS_Event<FunscriptNameChangedEvent>
 {
 	public:
-	// FIXME: get rid of this raw pointer
-	const Funscript* Script = nullptr;
+	// Use ID-based lookup instead of raw pointer to avoid use-after-free
+	uint32_t scriptId = 0;
+	std::string newName;
 	std::string oldName;
-	FunscriptNameChangedEvent(const Funscript* changedScript, const std::string& oldName) noexcept
-		: Script(changedScript), oldName(oldName) {}
+
+	FunscriptNameChangedEvent(uint32_t id, const std::string& newN, const std::string& oldN) noexcept
+		: scriptId(id), newName(newN), oldName(oldN) {}
 };
 
 class FunscriptRemovedEvent : public OFS_Event<FunscriptRemovedEvent>
@@ -101,6 +109,7 @@ private:
 	// FIXME: OFS should be able to retain metadata injected by other programs without overwriting it
 	//nlohmann::json JsonOther;
 
+	uint32_t scriptId = 0; // Unique ID for safe event handling (avoids use-after-free)
 	std::chrono::system_clock::time_point editTime;
 	bool funscriptChanged = false; // used to fire only one event every frame a change occurs
 	bool unsavedEdits = false; // used to track if the script has unsaved changes
@@ -201,6 +210,8 @@ public:
 	inline void ClearUnsavedEdits() noexcept { unsavedEdits = false;	}
 	inline const std::string& RelativePath() const noexcept { return currentPathRelative; }
 	inline const std::string& Title() const noexcept { return title; }
+	inline uint32_t ScriptId() const noexcept { return scriptId; }
+	inline void SetScriptId(uint32_t id) noexcept { scriptId = id; }
 
 	inline void Rollback(FunscriptData&& data) noexcept { this->data = std::move(data); notifyActionsChanged(true); }
 	inline void Rollback(const FunscriptData& data) noexcept { this->data = data; notifyActionsChanged(true); }
