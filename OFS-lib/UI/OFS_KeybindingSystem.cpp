@@ -30,14 +30,14 @@ inline static bool isModifierKey(ImGuiKey key) noexcept
     return std::find(ModifierKeys.begin(), ModifierKeys.end(), key) != ModifierKeys.end();
 }
 
-inline static const char* getTriggerText(const OFS_ActionTrigger& trigger) noexcept
+inline static std::string getTriggerText(const OFS_ActionTrigger& trigger) noexcept
 {
     const char* key = nullptr;
     std::string mods;
 
     if(trigger.Mod != ImGuiKey_None)
     {
-        auto addMod = [](std::string& str, const char* mod) noexcept { 
+        auto addMod = [](std::string& str, const char* mod) noexcept {
             if(!str.empty()) str += '+';
             str += mod;
         };
@@ -60,20 +60,20 @@ inline static const char* getTriggerText(const OFS_ActionTrigger& trigger) noexc
         key = ImGui::GetKeyName(trigger.ImKey());
     }
 
+    // Build result string without using static buffer
     if(!mods.empty() && key != nullptr)
     {
-        FMT("%s+%s", mods.c_str(), key);
+        return mods + "+" + key;
     }
-    else if(!mods.empty() && key == nullptr) 
+    else if(!mods.empty() && key == nullptr)
     {
-        FMT("%s", mods.c_str());
+        return mods;
     }
-    else 
+    else if(key != nullptr)
     {
-        FMT("%s", key);
+        return std::string(key);
     }
-
-    return Util::FormatBuffer;
+    return "";
 }
 
 OFS_KeybindingSystem::OFS_KeybindingSystem() noexcept
@@ -254,7 +254,7 @@ void OFS_KeybindingSystem::renderNewTriggerModal() noexcept
         ImGui::TextDisabled("[%s]", editingActionId.c_str());
         ImGui::TextUnformatted(TR(CHANGE_KEY_MSG));
 
-        ImGui::TextUnformatted(getTriggerText(tmpTrigger));
+        ImGui::TextUnformatted(getTriggerText(tmpTrigger).c_str());
 
         const auto oldMod = tmpTrigger.Mod;
         const auto oldKey = tmpTrigger.Key;
@@ -341,7 +341,7 @@ KeyModalType OFS_KeybindingSystem::renderActionRow(OFS_ActionUI& ui) noexcept
             ImGui::PushID(i);
             ImGui::Bullet();
             ImGui::SameLine();
-            if(ImGui::Selectable(getTriggerText(trigger), false, ImGuiSelectableFlags_DontClosePopups))
+            if(ImGui::Selectable(getTriggerText(trigger).c_str(), false, ImGuiSelectableFlags_DontClosePopups))
             {
                 editingTrigger = trigger;
                 keyModal = KeyModalType::Edit;
@@ -463,7 +463,7 @@ void OFS_KeybindingSystem::RenderKeybindingWindow() noexcept
             for(int i=0, size=orphanTriggers.size(); i < size; i += 1)
             {
                 auto& orphanTrigger = orphanTriggers[i];
-                ImGui::Text("%s [%s]", orphanTrigger.MappedActionId.c_str(), getTriggerText(orphanTrigger));
+                ImGui::Text("%s [%s]", orphanTrigger.MappedActionId.c_str(), getTriggerText(orphanTrigger).c_str());
                 ImGui::SameLine();
                 if(ImGui::Button(FMT("%s " ICON_TRASH, TR(DELETE))))
                 {

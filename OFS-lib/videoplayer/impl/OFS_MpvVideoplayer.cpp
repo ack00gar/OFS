@@ -744,12 +744,10 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 		);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-		LOG_INFO("Blit completed, checking GL error...");
+		// Check for GL errors (only log if error occurs)
 		GLenum err = glGetError();
 		if (err != GL_NO_ERROR) {
 			LOGF_ERROR("OpenGL error after blit: 0x%x", err);
-		} else {
-			LOG_INFO("Blit successful, no GL errors");
 		}
 
 		// GPU-based VR processing pipeline using VrShader (same as main window)
@@ -811,9 +809,7 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 		int readIndex = ctx->processingPBOIndex;
 		int writeIndex = (ctx->processingPBOIndex + 1) % 2;
 
-		LOGF_INFO("PBO readback: finalTexture=%u, readIndex=%d, writeIndex=%d", finalTexture, readIndex, writeIndex);
-
-		// Bind the final texture for reading (could be raw, cropped, or unwarped)
+		// Bind the final texture for reading (raw or cropped for VR)
 		glBindTexture(GL_TEXTURE_2D, finalTexture);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, ctx->processingPBO[writeIndex]);
 		glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
@@ -823,16 +819,6 @@ inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 		const uint8_t* frameData = (const uint8_t*)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
 
 		if (frameData) {
-			// Check if data is non-zero (basic sanity check)
-			bool hasData = false;
-			for (int i = 0; i < 1000; i++) {
-				if (frameData[i] != 0) {
-					hasData = true;
-					break;
-				}
-			}
-			LOGF_INFO("PBO mapped successfully, hasData=%d, first bytes: %02x %02x %02x %02x",
-			          hasData, frameData[0], frameData[1], frameData[2], frameData[3]);
 
 			// Emit event with processing frame data
 			double timeSeconds = ctx->data.duration * ctx->data.percentPos;
