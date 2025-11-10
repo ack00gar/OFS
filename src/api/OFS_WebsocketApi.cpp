@@ -136,6 +136,10 @@ static int EventSerializationThread(void* user) noexcept
 			for(auto& ev : ctx->events)
 			{
 				auto toJson = dynamic_cast<ToJsonInterface*>(ev.get());
+				if (!toJson) {
+					LOG_WARN("WebSocket event does not implement ToJsonInterface, skipping serialization");
+					continue;
+				}
 				nlohmann::json json;
 				toJson->Serialize(json);
 				auto jsonText = Util::SerializeJson(json);
