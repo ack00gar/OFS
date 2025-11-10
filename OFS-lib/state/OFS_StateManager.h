@@ -61,15 +61,23 @@ class OFS_StateMetadata
     template<typename T>
     static bool serializeUntyped(const std::any& value, nlohmann::json& obj, bool enableBinary) noexcept
     {
-        auto& realValue = std::any_cast<const T&>(value);
-        return enableBinary ? OFS::Serializer<true>::Serialize(realValue, obj) : OFS::Serializer<false>::Serialize(realValue, obj);
+        auto* realValue = std::any_cast<const T>(&value);
+        if (!realValue) {
+            LOG_ERROR("Failed to cast state value during serialization - type mismatch");
+            return false;
+        }
+        return enableBinary ? OFS::Serializer<true>::Serialize(*realValue, obj) : OFS::Serializer<false>::Serialize(*realValue, obj);
     }
 
     template<typename T>
     static bool deserializeUntyped(std::any& value, const nlohmann::json& obj, bool enableBinary) noexcept
     {
-        auto& realValue = std::any_cast<T&>(value);
-        return enableBinary ? OFS::Serializer<true>::Deserialize(realValue, obj) : OFS::Serializer<false>::Deserialize(realValue, obj);
+        auto* realValue = std::any_cast<T>(&value);
+        if (!realValue) {
+            LOG_ERROR("Failed to cast state value during deserialization - type mismatch");
+            return false;
+        }
+        return enableBinary ? OFS::Serializer<true>::Deserialize(*realValue, obj) : OFS::Serializer<false>::Deserialize(*realValue, obj);
     }
 };
 
@@ -160,8 +168,9 @@ class OFS_StateManager
     {
         FUN_ASSERT(id < stateCollection.size(), "out of bounds");
         auto& item = stateCollection[id];
-        auto& value = std::any_cast<T&>(item.State);
-        return value;
+        auto* value = std::any_cast<T>(&item.State);
+        FUN_ASSERT(value != nullptr, "State type mismatch - this indicates a serious programming error");
+        return *value;
     }
 
     public:
