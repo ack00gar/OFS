@@ -287,3 +287,255 @@ public:
 	void LightPos(const float* vec3) noexcept;
 	void ViewPos(const float* vec3) noexcept;
 };
+
+// Equirectangular VR unwarp shader (180/360)
+class EquirectUnwarpShader : public ShaderBase
+{
+private:
+	int32_t YawLoc = 0;
+	int32_t PitchLoc = 0;
+	int32_t FovLoc = 0;
+	int32_t AspectLoc = 0;
+	int32_t Is180Loc = 0;
+
+	static constexpr const char* vtxShader = OFS_SHADER_VERSION R"(
+		layout (location = 0) in vec2 aPos;
+		layout (location = 1) in vec2 aTexCoords;
+		out vec2 TexCoords;
+		void main() {
+			TexCoords = aTexCoords;
+			gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
+		}
+	)";
+
+	static constexpr const char* fragShader = OFS_SHADER_VERSION R"(
+		in vec2 TexCoords;
+		out vec4 FragColor;
+		uniform sampler2D inputTexture;
+		uniform float u_yaw;
+		uniform float u_pitch;
+		uniform float u_fov;
+		uniform float u_aspect;
+		uniform int u_is_180;
+
+		const float PI = 3.14159265359;
+
+		mat3 rotationY(float angle) {
+			float c = cos(angle);
+			float s = sin(angle);
+			return mat3(c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c);
+		}
+
+		mat3 rotationX(float angle) {
+			float c = cos(angle);
+			float s = sin(angle);
+			return mat3(1.0, 0.0, 0.0, 0.0, c, -s, 0.0, s, c);
+		}
+
+		vec2 equirect2flat(vec2 uv) {
+			// Convert from screen space [0,1] to NDC [-1,1]
+			vec2 ndc = uv * 2.0 - 1.0;
+			ndc.x *= u_aspect;
+
+			// Calculate ray direction for rectilinear projection
+			float focal_length = 1.0 / tan(u_fov * 0.5);
+			vec3 ray_dir = normalize(vec3(ndc.x, -ndc.y, focal_length));
+
+			// Apply rotation (yaw/pitch control)
+			mat3 rotation = rotationY(u_yaw) * rotationX(u_pitch);
+			ray_dir = rotation * ray_dir;
+
+			// Convert ray to spherical coordinates
+			float longitude = atan(ray_dir.x, ray_dir.z);
+			float latitude = asin(clamp(ray_dir.y, -1.0, 1.0));
+
+			// Map to equirectangular texture coordinates
+			vec2 equirect_uv;
+			if (u_is_180 == 1) {
+				// 180° mapping: longitude from -PI/2 to PI/2
+				equirect_uv.x = 0.5 + longitude / PI;
+			} else {
+				// 360° mapping: longitude from -PI to PI
+				equirect_uv.x = 0.5 + longitude / (2.0 * PI);
+			}
+			equirect_uv.y = 0.5 - latitude / PI;
+
+			return clamp(equirect_uv, 0.0, 1.0);
+		}
+
+		void main() {
+			vec2 src_uv = equirect2flat(TexCoords);
+			FragColor = texture(inputTexture, src_uv);
+		}
+	)";
+
+	void initUniformLocations() noexcept;
+
+public:
+	EquirectUnwarpShader() noexcept : ShaderBase(vtxShader, fragShader)
+	{
+		initUniformLocations();
+	}
+
+	void SetYaw(float yaw) noexcept;
+	void SetPitch(float pitch) noexcept;
+	void SetFov(float fov) noexcept;
+	void SetAspect(float aspect) noexcept;
+	void SetIs180(bool is180) noexcept;
+};
+
+// Fisheye VR unwarp shader (190/200)
+class FisheyeUnwarpShader : public ShaderBase
+{
+private:
+	int32_t YawLoc = 0;
+	int32_t PitchLoc = 0;
+	int32_t FovLoc = 0;
+	int32_t OutputFovLoc = 0;
+	int32_t AspectLoc = 0;
+	int32_t UseRightEyeLoc = 0;
+
+	static constexpr const char* vtxShader = OFS_SHADER_VERSION R"(
+		layout (location = 0) in vec2 aPos;
+		layout (location = 1) in vec2 aTexCoords;
+		out vec2 TexCoords;
+		void main() {
+			TexCoords = aTexCoords;
+			gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
+		}
+	)";
+
+	static constexpr const char* fragShader = OFS_SHADER_VERSION R"(
+		in vec2 TexCoords;
+		out vec4 FragColor;
+		uniform sampler2D inputTexture;
+		uniform float u_yaw;
+		uniform float u_pitch;
+		uniform float u_fov;
+		uniform float u_output_fov;
+		uniform float u_aspect;
+		uniform int u_use_right_eye;
+
+		const float PI = 3.14159265359;
+
+		mat3 rotationY(float angle) {
+			float c = cos(angle);
+			float s = sin(angle);
+			return mat3(c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c);
+		}
+
+		mat3 rotationX(float angle) {
+			float c = cos(angle);
+			float s = sin(angle);
+			return mat3(1.0, 0.0, 0.0, 0.0, c, -s, 0.0, s, c);
+		}
+
+		vec2 flat2fish(vec2 uv) {
+			float fov_rad = PI * u_fov / 180.0;
+			float yaw_rad = PI * u_yaw / 180.0;
+			float pitch_rad = PI * u_pitch / 180.0;
+			float output_fov_rad = PI * u_output_fov / 180.0;
+			vec2 ndc = uv * 2.0 - 1.0;
+			ndc.x *= u_aspect;
+			float focal_length = 1.0 / tan(output_fov_rad * 0.5);
+			vec3 ray_dir = normalize(vec3(ndc.x, ndc.y, focal_length));
+			mat3 rotation = rotationY(yaw_rad) * rotationX(pitch_rad);
+			ray_dir = rotation * ray_dir;
+			float p_x = ray_dir.x;
+			float p_y = ray_dir.z;
+			float p_z = ray_dir.y;
+			float p_xz = sqrt(p_x * p_x + p_z * p_z);
+			float r = 2.0 * atan(p_xz, p_y) / fov_rad;
+			float theta = atan(p_z, p_x);
+			float x_src_norm = r * cos(theta);
+			float y_src_norm = r * sin(theta);
+			vec2 fish_uv = (vec2(x_src_norm, y_src_norm) + 1.0) * 0.5;
+			if (u_use_right_eye == 1) {
+				fish_uv.x = fish_uv.x * 0.5 + 0.5;
+			} else {
+				fish_uv.x = fish_uv.x * 0.5;
+			}
+			return clamp(fish_uv, 0.0, 1.0);
+		}
+
+		void main() {
+			vec2 src_uv = flat2fish(TexCoords);
+			FragColor = texture(inputTexture, src_uv);
+		}
+	)";
+
+	void initUniformLocations() noexcept;
+
+public:
+	FisheyeUnwarpShader() noexcept : ShaderBase(vtxShader, fragShader)
+	{
+		initUniformLocations();
+	}
+
+	void SetYaw(float yaw) noexcept;
+	void SetPitch(float pitch) noexcept;
+	void SetFov(float fov) noexcept;
+	void SetOutputFov(float outputFov) noexcept;
+	void SetAspect(float aspect) noexcept;
+	void SetUseRightEye(bool useRight) noexcept;
+};
+
+// Simple crop/extract shader for VR SBS/TB → single eye
+class VRCropShader : public ShaderBase
+{
+private:
+	int32_t LayoutLoc = 0;
+	int32_t UseRightEyeLoc = 0;
+
+	static constexpr const char* vtxShader = OFS_SHADER_VERSION R"(
+		layout (location = 0) in vec2 aPos;
+		layout (location = 1) in vec2 aTexCoords;
+		out vec2 TexCoords;
+		void main() {
+			TexCoords = aTexCoords;
+			gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
+		}
+	)";
+
+	static constexpr const char* fragShader = OFS_SHADER_VERSION R"(
+		in vec2 TexCoords;
+		out vec4 FragColor;
+		uniform sampler2D inputTexture;
+		uniform int u_layout; // 0=SBS, 1=TB, 2=Mono
+		uniform int u_use_right_eye;
+
+		void main() {
+			vec2 uv = TexCoords;
+
+			if (u_layout == 0) { // SBS
+				// Crop to left/right half horizontally, stretch to full width
+				if (u_use_right_eye == 1) {
+					uv.x = 0.5 + uv.x * 0.5; // Right half
+				} else {
+					uv.x = uv.x * 0.5; // Left half
+				}
+			} else if (u_layout == 1) { // TB
+				// Crop to top/bottom half vertically, stretch to full height
+				if (u_use_right_eye == 1) {
+					uv.y = 0.5 + uv.y * 0.5; // Bottom half
+				} else {
+					uv.y = uv.y * 0.5; // Top half
+				}
+			}
+			// u_layout == 2 (Mono) → no change, use uv as-is
+
+			FragColor = texture(inputTexture, uv);
+		}
+	)";
+
+	void initUniformLocations() noexcept;
+
+public:
+	VRCropShader() noexcept : ShaderBase(vtxShader, fragShader)
+	{
+		initUniformLocations();
+	}
+
+	void SetLayout(int layout) noexcept; // 0=SBS, 1=TB, 2=Mono
+	void SetUseRightEye(bool useRight) noexcept;
+};

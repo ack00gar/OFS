@@ -77,4 +77,8 @@ class OFS_Videoplayer
 
     const char* VideoPath() const noexcept;
     inline uint32_t FrameTexture() const noexcept { return frameTexture; }
+
+    // Enable/disable AI tracking processing (YOLO, optical flow, etc.)
+    void SetTrackingActive(bool active) noexcept;
+    bool IsTrackingActive() const noexcept;
 };

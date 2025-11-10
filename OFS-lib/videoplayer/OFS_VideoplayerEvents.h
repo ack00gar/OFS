@@ -58,3 +58,22 @@ class PlaybackSpeedChangeEvent : public OFS_Event<PlaybackSpeedChangeEvent>
 		: playerType(type), playbackSpeed(speed) {}
 
 };
+
+// Event emitted with downscaled frames for AI tracking (YOLO, optical flow, etc.)
+// Dual-pipeline architecture: display path remains full resolution, processing path is downscaled
+class ProcessingFrameReadyEvent : public OFS_Event<ProcessingFrameReadyEvent>
+{
+	public:
+	const uint8_t* frameData;  // Pointer to downscaled frame data (RGBA)
+	int width;                  // Processing frame width (e.g., 640)
+	int height;                 // Processing frame height (e.g., 640)
+	double timeSeconds;         // Timestamp
+	VideoplayerType playerType;
+	int originalWidth;          // Original video width (for coordinate transformation)
+	int originalHeight;         // Original video height
+
+	ProcessingFrameReadyEvent(const uint8_t* data, int w, int h, double time,
+	                          VideoplayerType type, int origW, int origH) noexcept
+		: frameData(data), width(w), height(h), timeSeconds(time),
+		  playerType(type), originalWidth(origW), originalHeight(origH) {}
+};

@@ -32,6 +32,7 @@ struct OpenFunscripterState
 
     bool showDebugLog = false;
     bool showVideo = true;
+    bool showProcessingVideo = false;
 
     bool showActionEditor = false;
     bool showStatistics = true;
@@ -63,6 +64,7 @@ REFL_TYPE(OpenFunscripterState)
     REFL_FIELD(lastPath)
     REFL_FIELD(showDebugLog)
     REFL_FIELD(showVideo)
+    REFL_FIELD(showProcessingVideo)
     REFL_FIELD(alwaysShowBookmarkLabels)
     REFL_FIELD(showHistory)
     REFL_FIELD(showSimulator)

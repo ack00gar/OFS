@@ -2,8 +2,10 @@
 .cache
 build
 build_app
+build-*
 out
 bin
+.DS_Store
 *.zip
 *.7z
 Logo.xcf

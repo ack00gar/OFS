@@ -20,6 +20,7 @@
 
 #include "OFS_Videoplayer.h"
 #include "OFS_VideoplayerWindow.h"
+#include "OFS_ProcessingVideoWindow.h"
 #include "OFS_WebsocketApi.h"
 #include "OFS_ChapterManager.h"
 
@@ -149,6 +150,7 @@ public:
 
     std::unique_ptr<OFS_Videoplayer> player;
     std::unique_ptr<OFS_VideoplayerWindow> playerWindow;
+    std::unique_ptr<OFS_ProcessingVideoWindow> processingWindow;
     std::unique_ptr<OFS_KeybindingSystem> keys;
     std::unique_ptr<SpecialFunctionsWindow> specialFunctions;
     std::unique_ptr<ScriptingMode> scripting;

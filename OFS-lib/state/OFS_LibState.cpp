@@ -1,5 +1,6 @@
 #include "state/OFS_LibState.h"
 #include "state/states/VideoplayerWindowState.h"
+#include "state/states/ProcessingVideoWindowState.h"
 #include "state/states/BaseOverlayState.h"
 #include "state/states/WaveformState.h"
 #include "state/states/KeybindingState.h"
@@ -13,6 +14,7 @@ void OFS_LibState::RegisterAll() noexcept
 
     // Project state
     OFS_REGISTER_STATE(VideoPlayerWindowState);
+    OFS_REGISTER_STATE(ProcessingVideoWindowState);
     OFS_REGISTER_STATE(WaveformState);
     OFS_REGISTER_STATE(ChapterState);
 }

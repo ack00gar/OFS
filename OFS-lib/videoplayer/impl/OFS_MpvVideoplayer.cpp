@@ -9,6 +9,10 @@
 
 #include "OFS_Localization.h"
 #include "OFS_GL.h"
+#include "OFS_Shader.h"
+#include "videoplayer/OFS_VRFormatDetector.h"
+#include "state/states/ProcessingVideoWindowState.h"
+#include "state/OFS_StateManager.h"
 
 #include <sstream>
 
@@ -65,6 +69,36 @@ struct MpvPlayerContext
 
     uint64_t smoothTimer = 0;
     VideoplayerType playerType;
+
+    // Generic processing path for AI tracking (YOLO, optical flow, etc.)
+    // Renders downscaled frames for efficient CPU processing
+    static constexpr int PROCESSING_SIZE = 640;
+    uint32_t processingFramebuffer = 0;
+    uint32_t processingTexture = 0;
+    uint32_t processingPBO[2] = {0, 0};  // Double-buffered PBO for async readback
+    int processingPBOIndex = 0;
+    bool trackingActive = false;  // Set by tracking systems
+
+    // VR unwarp pipeline resources
+    uint32_t fullResFramebuffer = 0;     // FBO for full-resolution VR render (before crop)
+    uint32_t fullResTexture = 0;
+    uint32_t croppedFramebuffer = 0;     // FBO for cropped VR panel (SBS/TB → single eye)
+    uint32_t croppedTexture = 0;
+    uint32_t unwarpedFramebuffer = 0;    // FBO for unwarped output
+    uint32_t unwarpedTexture = 0;
+    uint32_t quadVAO = 0;                // Full-screen quad for shader rendering
+    uint32_t quadVBO = 0;
+
+    // VR detection and settings
+    VRFormatInfo vrFormat;
+    bool vrDetectionDone = false;
+
+    // VR unwarp shaders
+    VRCropShader* cropShader = nullptr;
+    VrShader* vrShader = nullptr;  // Use the proven VR shader from main window
+
+    // State handle for VR settings
+    uint32_t vrStateHandle = 0;
 };
 
 #define CTX static_cast<MpvPlayerContext*>(ctx)
@@ -104,6 +138,156 @@ inline static void notifyPlaybackSpeed(MpvPlayerContext* ctx) noexcept
     EV::Enqueue<PlaybackSpeedChangeEvent>((float)CTX->data.currentSpeed, CTX->playerType);
 }
 
+inline static void updateProcessingFBO(MpvPlayerContext* ctx) noexcept
+{
+	// Create processing FBO for AI tracking (YOLO, optical flow, etc.)
+	if (!ctx->processingFramebuffer) {
+		// Create framebuffer
+		glGenFramebuffers(1, &ctx->processingFramebuffer);
+		glBindFramebuffer(GL_FRAMEBUFFER, ctx->processingFramebuffer);
+
+		// Create texture
+		glGenTextures(1, &ctx->processingTexture);
+		glBindTexture(GL_TEXTURE_2D, ctx->processingTexture);
+		glTexImage2D(GL_TEXTURE_2D, 0, OFS_InternalTexFormat,
+		            MpvPlayerContext::PROCESSING_SIZE, MpvPlayerContext::PROCESSING_SIZE,
+		            0, OFS_TexFormat, GL_UNSIGNED_BYTE, 0);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		// Attach to framebuffer
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+		                      GL_TEXTURE_2D, ctx->processingTexture, 0);
+
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			LOG_ERROR("Failed to create processing FBO for AI tracking!");
+		}
+
+		// Create double-buffered PBOs for async readback
+		glGenBuffers(2, ctx->processingPBO);
+		int pboSize = MpvPlayerContext::PROCESSING_SIZE * MpvPlayerContext::PROCESSING_SIZE * 4;
+		for (int i = 0; i < 2; ++i) {
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, ctx->processingPBO[i]);
+			glBufferData(GL_PIXEL_PACK_BUFFER, pboSize, 0, GL_STREAM_READ);
+		}
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
+		LOG_INFO("Processing FBO created for AI tracking (640x640 with async PBO readback)");
+	}
+
+	// Create VR pipeline FBOs (crop + unwarp)
+	if (!ctx->fullResFramebuffer) {
+		// Full-resolution FBO (for rendering VR video before crop)
+		// This will be resized dynamically to match video dimensions
+		glGenFramebuffers(1, &ctx->fullResFramebuffer);
+		glBindFramebuffer(GL_FRAMEBUFFER, ctx->fullResFramebuffer);
+
+		glGenTextures(1, &ctx->fullResTexture);
+		glBindTexture(GL_TEXTURE_2D, ctx->fullResTexture);
+		// Initial size - will be resized when video dimensions are known
+		glTexImage2D(GL_TEXTURE_2D, 0, OFS_InternalTexFormat,
+		            1920, 1080,  // Placeholder size
+		            0, OFS_TexFormat, GL_UNSIGNED_BYTE, 0);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+		                      GL_TEXTURE_2D, ctx->fullResTexture, 0);
+
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			LOG_ERROR("Failed to create full-resolution FBO for VR processing!");
+		}
+
+		LOG_INFO("Full-resolution VR FBO created");
+	}
+
+	if (!ctx->croppedFramebuffer) {
+		// Cropped FBO (for VR panel extraction)
+		glGenFramebuffers(1, &ctx->croppedFramebuffer);
+		glBindFramebuffer(GL_FRAMEBUFFER, ctx->croppedFramebuffer);
+
+		glGenTextures(1, &ctx->croppedTexture);
+		glBindTexture(GL_TEXTURE_2D, ctx->croppedTexture);
+		glTexImage2D(GL_TEXTURE_2D, 0, OFS_InternalTexFormat,
+		            MpvPlayerContext::PROCESSING_SIZE, MpvPlayerContext::PROCESSING_SIZE,
+		            0, OFS_TexFormat, GL_UNSIGNED_BYTE, 0);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+		                      GL_TEXTURE_2D, ctx->croppedTexture, 0);
+
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			LOG_ERROR("Failed to create cropped FBO for VR processing!");
+		}
+
+		// Unwarped FBO (for unwarp shader output)
+		glGenFramebuffers(1, &ctx->unwarpedFramebuffer);
+		glBindFramebuffer(GL_FRAMEBUFFER, ctx->unwarpedFramebuffer);
+
+		glGenTextures(1, &ctx->unwarpedTexture);
+		glBindTexture(GL_TEXTURE_2D, ctx->unwarpedTexture);
+		glTexImage2D(GL_TEXTURE_2D, 0, OFS_InternalTexFormat,
+		            MpvPlayerContext::PROCESSING_SIZE, MpvPlayerContext::PROCESSING_SIZE,
+		            0, OFS_TexFormat, GL_UNSIGNED_BYTE, 0);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+		                      GL_TEXTURE_2D, ctx->unwarpedTexture, 0);
+
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			LOG_ERROR("Failed to create unwarped FBO for VR processing!");
+		}
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		LOG_INFO("VR pipeline FBOs created (crop + unwarp)");
+	}
+
+	// Create full-screen quad for shader rendering
+	if (!ctx->quadVAO) {
+		float quadVertices[] = {
+			// positions   // texCoords
+			-1.0f,  1.0f,  0.0f, 1.0f,
+			-1.0f, -1.0f,  0.0f, 0.0f,
+			 1.0f, -1.0f,  1.0f, 0.0f,
+
+			-1.0f,  1.0f,  0.0f, 1.0f,
+			 1.0f, -1.0f,  1.0f, 0.0f,
+			 1.0f,  1.0f,  1.0f, 1.0f
+		};
+
+		glGenVertexArrays(1, &ctx->quadVAO);
+		glGenBuffers(1, &ctx->quadVBO);
+		glBindVertexArray(ctx->quadVAO);
+		glBindBuffer(GL_ARRAY_BUFFER, ctx->quadVBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+		glBindVertexArray(0);
+
+		LOG_INFO("Full-screen quad VAO/VBO created for VR shaders");
+	}
+
+	// Initialize VR shaders (lazily, only when needed)
+	if (!ctx->cropShader) {
+		ctx->cropShader = new VRCropShader();
+		LOG_INFO("VRCropShader initialized");
+	}
+	if (!ctx->vrShader) {
+		ctx->vrShader = new VrShader();
+		LOG_INFO("VrShader initialized for processing pipeline");
+	}
+}
+
 inline static void updateRenderTexture(MpvPlayerContext* ctx) noexcept
 {
     if (!ctx->framebuffer) {
@@ -138,6 +322,9 @@ inline static void updateRenderTexture(MpvPlayerContext* ctx) noexcept
 		glBindTexture(GL_TEXTURE_2D, *ctx->frameTexture);
 		glTexImage2D(GL_TEXTURE_2D, 0, OFS_InternalTexFormat, ctx->data.videoWidth, ctx->data.videoHeight, 0, OFS_TexFormat, GL_UNSIGNED_BYTE, 0);
 	}
+
+	// Also create processing FBO for AI tracking
+	updateProcessingFBO(ctx);
 }
 
 inline static void showText(MpvPlayerContext* ctx, const char* text) noexcept
@@ -263,6 +450,9 @@ bool OFS_Videoplayer::Init(bool hwAccel) noexcept
 	mpv_observe_property(CTX->mpv, MpvHwDecoder, "hwdec-current", MPV_FORMAT_STRING);
 	mpv_observe_property(CTX->mpv, MpvFramesPerSecond, "estimated-vf-fps", MPV_FORMAT_DOUBLE);
 
+	// Register or get state handle for VR settings
+	CTX->vrStateHandle = OFS_ProjectState<ProcessingVideoWindowState>::Register(ProcessingVideoWindowState::StateName);
+
     return true;
 }
 
@@ -291,12 +481,39 @@ inline static void ProcessEvents(MpvPlayerContext* ctx) noexcept
             }
             case MPV_EVENT_FILE_LOADED:
             {
-                ctx->data.videoLoaded = true; 	
+                ctx->data.videoLoaded = true;
+
+                // Run VR detection when file is loaded (dimensions are now available)
+                if (!ctx->vrDetectionDone && ctx->data.videoWidth > 0 && ctx->data.videoHeight > 0) {
+                    LOGF_DEBUG("Running VR detection on file load: %dx%d, path=%s",
+                              ctx->data.videoWidth, ctx->data.videoHeight, ctx->data.filePath.c_str());
+                    ctx->vrFormat = OFS_VRFormatDetector::DetectFormat(
+                        ctx->data.videoWidth,
+                        ctx->data.videoHeight,
+                        ctx->data.filePath
+                    );
+                    ctx->vrDetectionDone = true;
+
+                    if (ctx->vrFormat.isVR) {
+                        LOGF_INFO("VR video detected: %s layout, %s projection, confidence: %.2f",
+                                 ctx->vrFormat.layout == VRLayout::SideBySide ? "SBS" :
+                                 ctx->vrFormat.layout == VRLayout::TopBottom ? "TB" : "Mono",
+                                 ctx->vrFormat.projection == VRProjection::Equirectangular180 ? "Equirect180" :
+                                 ctx->vrFormat.projection == VRProjection::Equirectangular360 ? "Equirect360" :
+                                 ctx->vrFormat.projection == VRProjection::Fisheye190 ? "Fisheye190" :
+                                 ctx->vrFormat.projection == VRProjection::Fisheye200 ? "Fisheye200" : "None",
+                                 ctx->vrFormat.confidence);
+                    } else {
+                        LOG_INFO("2D video detected");
+                    }
+                }
                 continue;
             }
             case MPV_EVENT_PROPERTY_CHANGE:
             {
                 mpv_event_property* prop = (mpv_event_property*)mp_event->data;
+                LOGF_DEBUG("Property change: name=%s, userdata=%lld, format=%d, data=%p",
+                          prop->name, mp_event->reply_userdata, prop->format, prop->data);
                 if (prop->data == nullptr) break;
                 switch (mp_event->reply_userdata) {
                     case MpvHwDecoder:
@@ -316,9 +533,35 @@ inline static void ProcessEvents(MpvPlayerContext* ctx) noexcept
                     case MpvVideoHeight:
                     {
                         ctx->data.videoHeight = *(int64_t*)prop->data;
-                        if (ctx->data.videoWidth > 0.f) {
+                        LOGF_DEBUG("MpvVideoHeight property: width=%d, height=%d, vrDetectionDone=%d",
+                                  ctx->data.videoWidth, ctx->data.videoHeight, ctx->vrDetectionDone);
+                        if (ctx->data.videoWidth > 0) {
                             updateRenderTexture(ctx);
                             ctx->data.videoLoaded = true;
+
+                            // Detect VR format when both width and height are known
+                            if (!ctx->vrDetectionDone) {
+                                LOGF_DEBUG("Running VR detection for: %s", ctx->data.filePath.c_str());
+                                ctx->vrFormat = OFS_VRFormatDetector::DetectFormat(
+                                    ctx->data.videoWidth,
+                                    ctx->data.videoHeight,
+                                    ctx->data.filePath
+                                );
+                                ctx->vrDetectionDone = true;
+
+                                if (ctx->vrFormat.isVR) {
+                                    LOGF_INFO("VR video detected: %s layout, %s projection, confidence: %.2f",
+                                             ctx->vrFormat.layout == VRLayout::SideBySide ? "SBS" :
+                                             ctx->vrFormat.layout == VRLayout::TopBottom ? "TB" : "Mono",
+                                             ctx->vrFormat.projection == VRProjection::Equirectangular180 ? "Equirect180" :
+                                             ctx->vrFormat.projection == VRProjection::Equirectangular360 ? "Equirect360" :
+                                             ctx->vrFormat.projection == VRProjection::Fisheye190 ? "Fisheye190" :
+                                             ctx->vrFormat.projection == VRProjection::Fisheye200 ? "Fisheye200" : "None",
+                                             ctx->vrFormat.confidence);
+                                } else {
+                                    LOG_INFO("2D video detected");
+                                }
+                            }
                         }
                         break;
                     }
@@ -374,23 +617,213 @@ inline static void ProcessEvents(MpvPlayerContext* ctx) noexcept
 
 inline static void RenderFrameToTexture(MpvPlayerContext* ctx) noexcept
 {
-    mpv_opengl_fbo fbo = {0};
-	fbo.fbo = ctx->framebuffer; 
-	fbo.w = ctx->data.videoWidth;
-	fbo.h = ctx->data.videoHeight;
-	fbo.internal_format = OFS_InternalTexFormat;
+	// Path 1: MAIN DISPLAY RENDER (full resolution, untouched)
+	mpv_opengl_fbo mainFbo = {0};
+	mainFbo.fbo = ctx->framebuffer;
+	mainFbo.w = ctx->data.videoWidth;
+	mainFbo.h = ctx->data.videoHeight;
+	mainFbo.internal_format = OFS_InternalTexFormat;
 
 	uint32_t disable = 0;
-	mpv_render_param params[] = {
-		{MPV_RENDER_PARAM_OPENGL_FBO, &fbo},
-		{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &disable}, 
+	mpv_render_param mainParams[] = {
+		{MPV_RENDER_PARAM_OPENGL_FBO, &mainFbo},
+		{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &disable},
 		mpv_render_param{}
 	};
-	mpv_render_context_render(ctx->mpvGL, params);
+	mpv_render_context_render(ctx->mpvGL, mainParams);
+
+	// Path 2: PROCESSING RENDER (downscaled for AI tracking)
+	// Only when tracking is active to avoid overhead
+	LOGF_INFO("Processing render check: trackingActive=%d, processingFramebuffer=%u",
+	          ctx->trackingActive, ctx->processingFramebuffer);
+
+	if (ctx->trackingActive && ctx->processingFramebuffer) {
+		LOG_INFO("Inside processing render block");
+
+		// Run VR detection if not done yet and dimensions are available
+		if (!ctx->vrDetectionDone && ctx->data.videoWidth > 0 && ctx->data.videoHeight > 0) {
+			LOGF_INFO("Running VR detection in render: %dx%d, path=%s",
+			          ctx->data.videoWidth, ctx->data.videoHeight, ctx->data.filePath.c_str());
+			ctx->vrFormat = OFS_VRFormatDetector::DetectFormat(
+				ctx->data.videoWidth,
+				ctx->data.videoHeight,
+				ctx->data.filePath
+			);
+			ctx->vrDetectionDone = true;
+
+			if (ctx->vrFormat.isVR) {
+				LOGF_INFO("VR video detected: %s layout, %s projection, confidence: %.2f",
+				         ctx->vrFormat.layout == VRLayout::SideBySide ? "SBS" :
+				         ctx->vrFormat.layout == VRLayout::TopBottom ? "TB" : "Mono",
+				         ctx->vrFormat.projection == VRProjection::Equirectangular180 ? "Equirect180" :
+				         ctx->vrFormat.projection == VRProjection::Equirectangular360 ? "Equirect360" :
+				         ctx->vrFormat.projection == VRProjection::Fisheye190 ? "Fisheye190" :
+				         ctx->vrFormat.projection == VRProjection::Fisheye200 ? "Fisheye200" : "None",
+				         ctx->vrFormat.confidence);
+			} else {
+				LOG_INFO("2D video detected");
+			}
+		}
+
+		// For now: just render to 640x640 without crop
+		// TODO: Implement VR crop using a different method (shader-based or viewport)
+		mpv_opengl_fbo procFbo = {0};
+		procFbo.fbo = ctx->processingFramebuffer;
+		procFbo.w = MpvPlayerContext::PROCESSING_SIZE;
+		procFbo.h = MpvPlayerContext::PROCESSING_SIZE;
+		procFbo.internal_format = OFS_InternalTexFormat;
+
+		mpv_render_param procParams[] = {
+			{MPV_RENDER_PARAM_OPENGL_FBO, &procFbo},
+			{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &disable},
+			mpv_render_param{}
+		};
+		mpv_render_context_render(ctx->mpvGL, procParams);
+
+		// GPU-based VR processing pipeline using VrShader (same as main window)
+		// Pipeline: crop (SBS/TB → single eye) → VrShader unwarp → readback
+
+		// Get VR settings from UI state
+		auto& vrState = ProcessingVideoWindowState::State(ctx->vrStateHandle);
+
+		// Apply UI overrides to VR format
+		VRFormatInfo activeFormat = ctx->vrFormat;  // Start with auto-detected
+
+		// Override video type
+		if (vrState.videoType == ProcessingVideoType::Force2D) {
+			activeFormat.isVR = false;
+		} else if (vrState.videoType == ProcessingVideoType::ForceVR) {
+			activeFormat.isVR = true;
+		}
+
+		// Override layout
+		if (vrState.vrLayout == ProcessingVRLayout::ForceSBS) {
+			activeFormat.layout = VRLayout::SideBySide;
+		} else if (vrState.vrLayout == ProcessingVRLayout::ForceTB) {
+			activeFormat.layout = VRLayout::TopBottom;
+		}
+
+		bool isVR = activeFormat.isVR;
+		bool needsProcessing = isVR && activeFormat.layout != VRLayout::None;
+
+		uint32_t finalTexture = ctx->processingTexture;  // Default: use raw mpv output
+
+		if (needsProcessing && ctx->cropShader && ctx->vrShader && ctx->quadVAO) {
+			// Step 1: Apply VR crop shader (SBS/TB → single eye)
+			glBindFramebuffer(GL_FRAMEBUFFER, ctx->croppedFramebuffer);
+			glViewport(0, 0, MpvPlayerContext::PROCESSING_SIZE, MpvPlayerContext::PROCESSING_SIZE);
+			glClear(GL_COLOR_BUFFER_BIT);
+
+			ctx->cropShader->Use();
+			int layoutType = (activeFormat.layout == VRLayout::SideBySide) ? 0 : 1;
+			ctx->cropShader->SetLayout(layoutType);
+			ctx->cropShader->SetUseRightEye(vrState.useRightEye);
+
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, ctx->processingTexture);
+			glBindVertexArray(ctx->quadVAO);
+			glDrawArrays(GL_TRIANGLES, 0, 6);
+			glBindVertexArray(0);
+
+			// Step 2: Apply VrShader (same shader as main VR view window)
+			glBindFramebuffer(GL_FRAMEBUFFER, ctx->unwarpedFramebuffer);
+			glViewport(0, 0, MpvPlayerContext::PROCESSING_SIZE, MpvPlayerContext::PROCESSING_SIZE);
+			glClear(GL_COLOR_BUFFER_BIT);
+
+			ctx->vrShader->Use();
+
+			// Setup ortho projection for full-screen quad
+			float L = 0.0f;
+			float R = (float)MpvPlayerContext::PROCESSING_SIZE;
+			float T = 0.0f;
+			float B = (float)MpvPlayerContext::PROCESSING_SIZE;
+			const float ortho_projection[4][4] = {
+				{ 2.0f / (R - L), 0.0f, 0.0f, 0.0f },
+				{ 0.0f, 2.0f / (T - B), 0.0f, 0.0f },
+				{ 0.0f, 0.0f, -1.0f, 0.0f },
+				{ (R + L) / (L - R), (T + B) / (B - T), 0.0f, 1.0f },
+			};
+			ctx->vrShader->ProjMtx(&ortho_projection[0][0]);
+
+			// Convert pitch from UI (-90 to 90°) to VrShader format (0 to 1)
+			// VrShader expects rotation.y in range [0,1] where 0.5 is center
+			// pitch = -90° → rotation.y = 0.0 (looking down)
+			// pitch = 0°   → rotation.y = 0.5 (center)
+			// pitch = 90°  → rotation.y = 1.0 (looking up)
+			float pitchNormalized = 0.5f - (vrState.vrPitch / 180.0f);
+
+			// Yaw is already 0 from UI, keep it at 0.5 (center)
+			float yawNormalized = 0.5f;
+
+			float rotation[2] = { yawNormalized, pitchNormalized };
+			ctx->vrShader->Rotation(rotation);
+
+			// Use zoom from UI state
+			ctx->vrShader->Zoom(vrState.vrZoom);
+
+			// Aspect ratios
+			ctx->vrShader->AspectRatio(1.0f);  // 640x640 is square
+
+			// Video aspect after crop is square (single eye)
+			ctx->vrShader->VideoAspectRatio(1.0f);
+
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, ctx->croppedTexture);
+			glBindVertexArray(ctx->quadVAO);
+			glDrawArrays(GL_TRIANGLES, 0, 6);
+			glBindVertexArray(0);
+
+			finalTexture = ctx->unwarpedTexture;
+
+			// Reset state
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		}
+
+		// Async PBO readback (double-buffered, non-blocking)
+		// Read from previous frame, start readback for current frame
+		int readIndex = ctx->processingPBOIndex;
+		int writeIndex = (ctx->processingPBOIndex + 1) % 2;
+
+		// Bind the final texture for reading (could be raw, cropped, or unwarped)
+		glBindTexture(GL_TEXTURE_2D, finalTexture);
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, ctx->processingPBO[writeIndex]);
+		glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+
+		// Map read PBO to get data from previous frame (may block if not ready)
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, ctx->processingPBO[readIndex]);
+		const uint8_t* frameData = (const uint8_t*)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+
+		if (frameData) {
+			// Emit event with processing frame data
+			double timeSeconds = ctx->data.duration * ctx->data.percentPos;
+			EV::Enqueue<ProcessingFrameReadyEvent>(
+				frameData,
+				MpvPlayerContext::PROCESSING_SIZE,
+				MpvPlayerContext::PROCESSING_SIZE,
+				timeSeconds,
+				ctx->playerType,
+				ctx->data.videoWidth,
+				ctx->data.videoHeight
+			);
+
+			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+		}
+
+		// Unbind PBO
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
+		// Swap PBO index for next frame
+		ctx->processingPBOIndex = writeIndex;
+	}
 }
 
 void OFS_Videoplayer::Update(float delta) noexcept
 {
+    static bool logged = false;
+    if (!logged) {
+        LOG_INFO("OFS_Videoplayer::Update() called for first time");
+        logged = true;
+    }
     while(SDL_AtomicGet(&CTX->hasEvents) > 0) {
         ProcessEvents(CTX);
         SDL_AtomicDecRef(&CTX->hasEvents);
@@ -449,6 +882,7 @@ void OFS_Videoplayer::OpenVideo(const std::string& path) noexcept
     newCache.currentSpeed = CTX->data.currentSpeed;
     newCache.paused = CTX->data.paused;
     CTX->data = newCache;
+    CTX->vrDetectionDone = false;  // Reset VR detection for new video
 
     SetPaused(true);
     SetVolume(CTX->data.currentVolume);
@@ -631,4 +1065,19 @@ double OFS_Videoplayer::CurrentPlayerPosition() const noexcept
 const char* OFS_Videoplayer::VideoPath() const noexcept
 {
     return CTX->data.filePath.c_str();
+}
+
+void OFS_Videoplayer::SetTrackingActive(bool active) noexcept
+{
+	CTX->trackingActive = active;
+	if (active) {
+		LOG_INFO("AI tracking enabled - processing pipeline active");
+	} else {
+		LOG_INFO("AI tracking disabled - processing pipeline inactive");
+	}
+}
+
+bool OFS_Videoplayer::IsTrackingActive() const noexcept
+{
+	return CTX->trackingActive;
 }

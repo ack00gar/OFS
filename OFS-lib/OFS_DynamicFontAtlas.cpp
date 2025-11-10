@@ -17,6 +17,7 @@ ImFont* OFS_DynFontAtlas::DefaultFont = nullptr;
 ImFont* OFS_DynFontAtlas::DefaultFont2 = nullptr;
 
 std::string OFS_DynFontAtlas::FontOverride;
+bool OFS_DynFontAtlas::EnableTracking = false;
 
 OFS_DynFontAtlas::OFS_DynFontAtlas() noexcept
 {

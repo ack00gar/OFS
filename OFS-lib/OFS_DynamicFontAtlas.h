@@ -12,6 +12,7 @@ struct OFS_DynFontAtlas {
     bool forceRebuild = false;
 
     static std::string FontOverride;
+    static bool EnableTracking;
 
     static ImFont* DefaultFont;
     static ImFont* DefaultFont2;

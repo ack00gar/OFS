@@ -24,6 +24,8 @@ set(OFS_LIB_SOURCES
 	"UI/OFS_Waveform.cpp"
 	
 	"videoplayer/OFS_VideoplayerWindow.cpp"
+	"videoplayer/OFS_ProcessingVideoWindow.cpp"
+	"videoplayer/OFS_VRFormatDetector.cpp"
 	"videoplayer/impl/OFS_MpvVideoplayer.cpp"
 
 	"state/OFS_StateManager.cpp"

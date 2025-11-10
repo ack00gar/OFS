@@ -220,6 +220,12 @@ bool OpenFunscripter::Init(int argc, char* argv[])
         return false;
     }
 
+    processingWindow = std::make_unique<OFS_ProcessingVideoWindow>();
+    if (!processingWindow->Init()) {
+        LOG_ERROR("Failed to init processing video window");
+        return false;
+    }
+
     playerControls.Init(player.get(), prefState.forceHwDecoding);
     undoSystem = std::make_unique<UndoSystem>();
 
@@ -1466,6 +1472,12 @@ void OpenFunscripter::update() noexcept
     const float delta = ImGui::GetIO().DeltaTime;
     keys->ProcessKeybindings();
     extensions->Update(delta);
+
+    static bool logged = false;
+    if (!logged) {
+        LOGF_INFO("OpenFunscripter::update() calling player->Update(), player=%p", (void*)player.get());
+        logged = true;
+    }
     player->Update(delta);
     playerControls.videoPreview->Update(delta);
     ControllerInput::UpdateControllers();
@@ -1686,6 +1698,7 @@ void OpenFunscripter::Step() noexcept
             }
 
             playerWindow->DrawVideoPlayer(NULL, &ofsState.showVideo);
+            processingWindow->DrawProcessingVideo(&ofsState.showProcessingVideo);
         }
 
         render();
@@ -2510,7 +2523,11 @@ void OpenFunscripter::ShowMainMenuBar() noexcept
 
             ImGui::Separator();
 
+            if (ImGui::MenuItem("Enable Tracking", NULL, &OFS_DynFontAtlas::EnableTracking)) {
+                player->SetTrackingActive(OFS_DynFontAtlas::EnableTracking);
+            }
             if (ImGui::MenuItem(TR(DRAW_VIDEO), NULL, &ofsState.showVideo)) {}
+            if (ImGui::MenuItem("Draw processing video", NULL, &ofsState.showProcessingVideo)) {}
             if (ImGui::MenuItem(TR(RESET_VIDEO_POS), NULL)) {
                 playerWindow->ResetTranslationAndZoom();
             }

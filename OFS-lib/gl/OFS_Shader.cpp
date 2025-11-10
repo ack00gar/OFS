@@ -175,3 +175,101 @@ void WaveformShader::Color(float* vec3) noexcept
 {
 	glUniform3fv(ColorLoc, 1, vec3);
 }
+
+// ===== EquirectUnwarpShader =====
+
+void EquirectUnwarpShader::initUniformLocations() noexcept
+{
+	YawLoc = glGetUniformLocation(program, "u_yaw");
+	PitchLoc = glGetUniformLocation(program, "u_pitch");
+	FovLoc = glGetUniformLocation(program, "u_fov");
+	AspectLoc = glGetUniformLocation(program, "u_aspect");
+	Is180Loc = glGetUniformLocation(program, "u_is_180");
+	glUniform1i(glGetUniformLocation(program, "inputTexture"), 0);
+}
+
+void EquirectUnwarpShader::SetYaw(float yaw) noexcept
+{
+	glUniform1f(YawLoc, yaw);
+}
+
+void EquirectUnwarpShader::SetPitch(float pitch) noexcept
+{
+	glUniform1f(PitchLoc, pitch);
+}
+
+void EquirectUnwarpShader::SetFov(float fov) noexcept
+{
+	glUniform1f(FovLoc, fov);
+}
+
+void EquirectUnwarpShader::SetAspect(float aspect) noexcept
+{
+	glUniform1f(AspectLoc, aspect);
+}
+
+void EquirectUnwarpShader::SetIs180(bool is180) noexcept
+{
+	glUniform1i(Is180Loc, is180 ? 1 : 0);
+}
+
+// ===== FisheyeUnwarpShader =====
+
+void FisheyeUnwarpShader::initUniformLocations() noexcept
+{
+	YawLoc = glGetUniformLocation(program, "u_yaw");
+	PitchLoc = glGetUniformLocation(program, "u_pitch");
+	FovLoc = glGetUniformLocation(program, "u_fov");
+	OutputFovLoc = glGetUniformLocation(program, "u_output_fov");
+	AspectLoc = glGetUniformLocation(program, "u_aspect");
+	UseRightEyeLoc = glGetUniformLocation(program, "u_use_right_eye");
+}
+
+void FisheyeUnwarpShader::SetYaw(float yaw) noexcept
+{
+	glUniform1f(YawLoc, yaw);
+}
+
+void FisheyeUnwarpShader::SetPitch(float pitch) noexcept
+{
+	glUniform1f(PitchLoc, pitch);
+}
+
+void FisheyeUnwarpShader::SetFov(float fov) noexcept
+{
+	glUniform1f(FovLoc, fov);
+}
+
+void FisheyeUnwarpShader::SetOutputFov(float outputFov) noexcept
+{
+	glUniform1f(OutputFovLoc, outputFov);
+}
+
+void FisheyeUnwarpShader::SetAspect(float aspect) noexcept
+{
+	glUniform1f(AspectLoc, aspect);
+}
+
+void FisheyeUnwarpShader::SetUseRightEye(bool useRight) noexcept
+{
+	glUniform1i(UseRightEyeLoc, useRight ? 1 : 0);
+}
+
+// ===== VRCropShader =====
+
+void VRCropShader::initUniformLocations() noexcept
+{
+	LayoutLoc = glGetUniformLocation(program, "u_layout");
+	UseRightEyeLoc = glGetUniformLocation(program, "u_use_right_eye");
+	glUniform1i(glGetUniformLocation(program, "inputTexture"), 0);
+}
+
+void VRCropShader::SetLayout(int layout) noexcept
+{
+	glUniform1i(LayoutLoc, layout);
+}
+
+void VRCropShader::SetUseRightEye(bool useRight) noexcept
+{
+	glUniform1i(UseRightEyeLoc, useRight ? 1 : 0);
+}
